@@ -1,0 +1,5 @@
+# ignore all .out files
+*.out
+
+# ignore all files in the temp folder in the root
+/temp/
