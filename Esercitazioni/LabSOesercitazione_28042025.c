@@ -29,14 +29,15 @@ Il numero massimo di "mittenti" gestibili deve essere impostato con un #define
 // maximum number of senders, as specified in the requests
 #define MAXMITTENTI 10
 
+// I want to count how many signals have been sent, is there a better way than a global variable?
+int n_signals = 0;
+
 // we need to keep track of who sent the signal and how many signals a specific sender has sent
 
 /*
   int lista_mittenti[MAXMITTENTI] = {0} // define the senders list and initialize all values to 0
   this list is too simple and unusable in our situation
 */
-
-int n_mittenti = 0;
 
 typedef struct mittente
 {
@@ -51,37 +52,31 @@ void gestisci_mittenti(pid_t PID_mittente, int segnale, Mittente *lista)
 {
   bool is_missing = true;
   bool found = false;
+  n_signals++;
   for (int i = 0; i < MAXMITTENTI && !found; i++)
   {
-    printf("\n siamo a indice i:%d\n", i);
     // remember the syntax (*pippo).pluto or pippo->pluto
     // if the slot is empty OR is the list PID matches the sender PID
     if (lista[i].PID_mittente == 0 || lista[i].PID_mittente == PID_mittente) // logical OR operator, left-to-right association
     {
       found = true;                         // if we found a free slot or a correspondence then we can quit
       lista[i].PID_mittente = PID_mittente; // if it is zero then we must set it, if it's the same it will stay the same anyway
-      printf("siamo dentro il primo if\n");
       is_missing = false;
       if (segnale == SIGUSR1)
       {
-        printf("siamo dentro il secondo if SIGUSR1\n");
-
         lista[i].conto_SIGUSR1++;
       }
       else
       {
-        printf("siamo dentro il terxo if SIGUSR2\n");
-
         lista[i].conto_SIGUSR2++;
       }
     }
   }
 
-  if (is_missing && n_mittenti >= MAXMITTENTI)
+  if (is_missing)
   {
-    n_mittenti++;
     printf("Maximum number of senders exceeded\n");
-    printf("There have been %d senders, but only %d were available\n", n_mittenti, MAXMITTENTI);
+    printf("Only %d slots are available\n", MAXMITTENTI);
     printf("The signal will not be recorded, please terminate and visualize the recap\n");
   }
 };
@@ -100,7 +95,7 @@ void handler_mittenti(int signal_received)
 // This is the complete handler that retains all the info we need
 void handler_mittenti(int signo, siginfo_t *info, void *empty)
 {
-  printf("\n- - - - -\t [%d]: Signal received \t- - - - -\n", getpid());
+  printf("\n- #%d - - - - - - - - -[%d]: Signal received - - - - - - - - - -\n", n_signals, getpid());
   printf("Signal sent by: %d\n", info->si_pid);
   printf("Signal code: %d\n", signo);
   switch (signo)
@@ -122,7 +117,8 @@ void handler_mittenti(int signo, siginfo_t *info, void *empty)
 
 void handler_terminazione(int signo, siginfo_t *info, void *empty)
 {
-  printf("\n- - - - -\t [%d]: Signal received \t- - - - -\n", getpid());
+  n_signals++;
+  printf("\n- #%d - - - - - - - - -[%d]: Signal received - - - - - - - - - -\n", n_signals, getpid());
   printf("Signal sent by: [%d]\n", info->si_pid);
   printf("Signal code: %d\n", signo);
   switch (signo)
@@ -140,13 +136,24 @@ void handler_terminazione(int signo, siginfo_t *info, void *empty)
     break;
   }
   // Recap terminazione
-  printf("\nTerminating\nRecap:\n");
-  for (int i = 0; i < MAXMITTENTI; i++)
+  printf("Terminating, printing recap\n");
+  printf("Total signals received: %d\n", n_signals - 1);
+  bool empty_slot = false;
+  for (int i = 0; i < MAXMITTENTI && !empty_slot != 0; i++)
   {
-    printf("PID: [%d]\n", lista_mittenti[i].PID_mittente);
-    printf("\tSIGUSR1 sent: %d\n", lista_mittenti[i].conto_SIGUSR1);
-    printf("\tSIGUSR2 sent: %d\n", lista_mittenti[i].conto_SIGUSR2);
+    if (lista_mittenti[i].PID_mittente == 0)
+    {
+      empty_slot = true;
+      printf("Empty slots: %d\n", MAXMITTENTI - i);
+    }
+    else
+    {
+      printf("PID: [%d]\n", lista_mittenti[i].PID_mittente);
+      printf("\tSIGUSR1 sent: %d\n", lista_mittenti[i].conto_SIGUSR1);
+      printf("\tSIGUSR2 sent: %d\n\n", lista_mittenti[i].conto_SIGUSR2);
+    }
   }
+  printf("\nSTOP\n");
   exit(EXIT_SUCCESS);
 }
 
