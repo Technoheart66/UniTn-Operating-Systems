@@ -50,22 +50,30 @@ Mittente lista_mittenti[MAXMITTENTI] = {0};
 void gestisci_mittenti(pid_t PID_mittente, int segnale, Mittente *lista)
 {
   bool is_missing = true;
-  for (int i = 0; i < MAXMITTENTI; i++)
+  bool found = false;
+  for (int i = 0; i < MAXMITTENTI && !found; i++)
   {
+    printf("\n siamo a indice i:%d\n", i);
     // remember the syntax (*pippo).pluto or pippo->pluto
-    // if the slot is empty
+    // if the slot is empty OR is the list PID matches the sender PID
     if (lista[i].PID_mittente == 0 || lista[i].PID_mittente == PID_mittente) // logical OR operator, left-to-right association
     {
+      found = true;                         // if we found a free slot or a correspondence then we can quit
+      lista[i].PID_mittente = PID_mittente; // if it is zero then we must set it, if it's the same it will stay the same anyway
+      printf("siamo dentro il primo if\n");
       is_missing = false;
       if (segnale == SIGUSR1)
       {
+        printf("siamo dentro il secondo if SIGUSR1\n");
+
         lista[i].conto_SIGUSR1++;
       }
       else
       {
+        printf("siamo dentro il terxo if SIGUSR2\n");
+
         lista[i].conto_SIGUSR2++;
       }
-      lista[i].PID_mittente = PID_mittente;
     }
   }
 
@@ -92,7 +100,7 @@ void handler_mittenti(int signal_received)
 // This is the complete handler that retains all the info we need
 void handler_mittenti(int signo, siginfo_t *info, void *empty)
 {
-  printf("\n- - - - -\t Signal received \t- - - - -\n");
+  printf("\n- - - - -\t [%d]: Signal received \t- - - - -\n", getpid());
   printf("Signal sent by: %d\n", info->si_pid);
   printf("Signal code: %d\n", signo);
   switch (signo)
@@ -114,8 +122,8 @@ void handler_mittenti(int signo, siginfo_t *info, void *empty)
 
 void handler_terminazione(int signo, siginfo_t *info, void *empty)
 {
-  printf("\n- - - - -\t Signal received \t- - - - -\n");
-  printf("Signal sent by: %d\n", info->si_pid);
+  printf("\n- - - - -\t [%d]: Signal received \t- - - - -\n", getpid());
+  printf("Signal sent by: [%d]\n", info->si_pid);
   printf("Signal code: %d\n", signo);
   switch (signo)
   {
@@ -135,9 +143,9 @@ void handler_terminazione(int signo, siginfo_t *info, void *empty)
   printf("\nTerminating\nRecap:\n");
   for (int i = 0; i < MAXMITTENTI; i++)
   {
-    printf("PID: [%d]\n", lista_mittenti->PID_mittente);
-    printf("\tSIGUSR1 sent: %d\n", lista_mittenti->conto_SIGUSR1);
-    printf("\tSIGUSR2 sent: %d\n", lista_mittenti->conto_SIGUSR2);
+    printf("PID: [%d]\n", lista_mittenti[i].PID_mittente);
+    printf("\tSIGUSR1 sent: %d\n", lista_mittenti[i].conto_SIGUSR1);
+    printf("\tSIGUSR2 sent: %d\n", lista_mittenti[i].conto_SIGUSR2);
   }
   exit(EXIT_SUCCESS);
 }
@@ -148,7 +156,7 @@ int main(void)
   // printf("lista mittenti[1] PID: %d\n", lista_mittenti[1].PID_mittente);
   // printf("lista mittenti[1] conto: %d\n", lista_mittenti[1].conto_SIGUSR1);
 
-  printf("START\n");
+  printf("\nSTART\n");
   printf("This is the main process, PID: [%d] \n", getpid());
   printf("To use: send signals SIGUSR1 and SIGUSR2\n");
   printf("To terminate: send signals SIGINT or SIGTERM\n");
