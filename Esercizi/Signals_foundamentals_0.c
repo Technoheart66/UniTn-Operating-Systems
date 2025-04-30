@@ -1,5 +1,7 @@
 // Signals_foundamentals_0.c
 
+// Useful C tips on signal handling
+
 #include <stdio.h>  //printf
 #include <signal.h> //signals
 #include <stdlib.h> //atoi, rand, srand, malloc, free, exit, EXIT_SUCCESS, EXIT_FAILURE, size_t etc.
