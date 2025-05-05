@@ -62,80 +62,64 @@ FALSE if NULL or EOF
 */
   if (fgets(input_line, *size, stream))
   {
+    char input[256];      // actual converted value in a new variable, safer because it is a backup
+    char command_text[8]; // store the text command value here
+    char command_num[4];  // store the integer command value here
     /*
     sscanf() function returns the number of fields that were successfully converted and assigned
     TRUE if it successfully converted and assigned to a variable
     FALSE otherwise
     */
-    char input[256];      // actual converted value in a new variable, safer because it is a backup
-    char command_text[8]; // store the text command value here
-    char command_num[4];  // store the integer command value here
-    if (sscanf(input_line, "%s", input) == 1)
-    {
-      printf("Your input: {%s}\n", input);
-      int i = 0; // for characters/letters
-      int j = 0; // for numbers
-      while (input[i] != NULL_CHAR)
-      {
-        // printf("carattere: %c\n", input[i]);
-        if (is_number(&input[i]))
-        {
-          printf("This is a number!! %c\n", input[i]);
-          command_num[j] = input[i];
-          j++;
-          i++;
-        }
-        else
-        {
-          if (input[i] != ' ')
-          {
-            command_text[i] = input[i];
-            // printf("Saving: {%c}\n", command_text[i]);
-          }
-          else
-          {
-            printf("a space\n");
-          }
-        }
-        // Before exiting remember to increment the index by one
-        i++;
-      }
-      // Since the while interrupts if we reached EOF then we need to check afterwards and insert it manually
-      if (input[i] == NULL_CHAR)
-      {
-        command_text[i] = '\0';
-        command_num[j] = '\0';
-      }
-      // Print the saved command for debugging purposes
-      int stampa = 0;
-      printf("This is the command: {");
-      while (command_text[stampa] != NULL_CHAR)
-      {
-        printf("%c", command_text[stampa]);
-        stampa++;
-      }
-      printf("}\n");
-      stampa = 0;
-      printf("This is the number: {");
-      while (command_num[stampa] != NULL_CHAR)
-      {
-        printf("stampa numero\n");
-        printf("%c", command_num[stampa]);
-        stampa++;
-      }
-      printf("}\n");
-    }
-    else
-    {
-      printf("Wrong input!\nYour input: {%s}\n", input_line);
-    }
+    int matches = sscanf(input_line, "%s %d", command_text, command_num);
 
-    // Let's parse the input and choose what to do now
-    if (strcmp(command_text, "child") == 0) // if the strings are exactly equal, accountinf for the null char as well
+    switch (matches)
     {
-      printf("This is the child command\n");
-      create_child_at_level(command_num);
+    case 1:
+      if (strcmp(command_text, "print") == 0)
+      {
+        printf("Printing process tree...\n");
+        // print_tree();
+      }
+      else if (strcmp(command_text, "quit") == 0)
+      {
+        printf("Quitting...\n");
+        // quit_program();
+      }
+      else
+      {
+        printf("Unknown command: %s\n", command_text);
+      }
+      break;
+    case 2:
+      if (strcmp(command_text, "child") == 0)
+      {
+        printf("Creating %d child processes\n", command_num);
+        // Let's parse the input and choose what to do now
+        if (strcmp(command_text, "child") == 0) // if the strings are exactly equal, accountinf for the null char as well
+        {
+          printf("This is the child command\n");
+          create_child_at_level(command_num);
+        }
+        // create_child(number);
+      }
+      else if (strcmp(command_text, "kill") == 0)
+      {
+        printf("Killing processes at level %d\n", command_num);
+        // kill_level(number);
+      }
+      else
+      {
+        printf("Unknown command with number: %s\n", command_num);
+      }
+      break;
+    default:
+      printf("There was an error parsing user input\n");
+      break;
     }
+  }
+  else
+  {
+    printf("Wrong input!\nYour input: {%s}\n", input_line);
   }
 }
 
