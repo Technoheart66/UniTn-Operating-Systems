@@ -30,7 +30,7 @@ L’output del comando ‘p’ non deve essere ordinato ma deve essere ben chiar
 // Function declaration section
 void take_input(char *input_line, int *size, FILE *stream);
 bool is_number(char *c);
-void create_child_at_level(char *level);
+void create_child_at_level(int *level);
 
 int main()
 {
@@ -64,13 +64,14 @@ FALSE if NULL or EOF
   {
     char input[256];      // actual converted value in a new variable, safer because it is a backup
     char command_text[8]; // store the text command value here
-    char command_num[4];  // store the integer command value here
+    int command_num;      // store the integer command value here
     /*
     sscanf() function returns the number of fields that were successfully converted and assigned
     TRUE if it successfully converted and assigned to a variable
     FALSE otherwise
     */
-    int matches = sscanf(input_line, "%s %d", command_text, command_num);
+    // Remember: no need to explicitly put &command_text[0] since in the variable command_text is stored the pointer to the first element
+    int matches = sscanf(input_line, "%s %d", command_text, &command_num);
 
     switch (matches)
     {
@@ -95,11 +96,7 @@ FALSE if NULL or EOF
       {
         printf("Creating %d child processes\n", command_num);
         // Let's parse the input and choose what to do now
-        if (strcmp(command_text, "child") == 0) // if the strings are exactly equal, accountinf for the null char as well
-        {
-          printf("This is the child command\n");
-          create_child_at_level(command_num);
-        }
+        create_child_at_level(&command_num);
         // create_child(number);
       }
       else if (strcmp(command_text, "kill") == 0)
@@ -109,7 +106,7 @@ FALSE if NULL or EOF
       }
       else
       {
-        printf("Unknown command with number: %s\n", command_num);
+        printf("Unknown command with number: %d\n", command_num);
       }
       break;
     default:
@@ -123,10 +120,9 @@ FALSE if NULL or EOF
   }
 }
 
-void create_child_at_level(char *level)
+void create_child_at_level(int *level)
 {
-  int n = atoi(level);
-  printf("Inside function! Level: {%d}\n", n);
+  printf("Inside function! Level: {%d}\n", *level);
 }
 
 bool is_number(char *c)
