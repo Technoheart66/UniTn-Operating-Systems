@@ -29,7 +29,7 @@ L’output del comando ‘p’ non deve essere ordinato ma deve essere ben chiar
 #define ASCII_9 57
 
 // Function declaration section
-void take_input(char *input_line, int *size, FILE *stream);
+int take_input(char *input_line, int *size, FILE *stream);
 bool is_number(char *c);
 void create_child_at_level(int *level);
 
@@ -39,28 +39,33 @@ int main()
   printf("PID: [%d]\n", getpid()); // It works also without <unistd.h> but it gives a warning
   printf("PPID: [%d]\n", getppid());
 
-  // Taking user input
+  int operation_counter = 0;
+
   printf("Waiting for user input, choose between:\n - child n\n - kill n\n - print\n - quit\n> ");
   char input_line[256]; // max input line dimension
   int input_line_dim = sizeof(input_line);
-  take_input(input_line, &input_line_dim, stdin);
+  while (take_input(input_line, &input_line_dim, stdin))
+  {
+    printf("Operation #%d\n", operation_counter);
+  }
 
   return EXIT_SUCCESS;
 }
 
 // Function definition section
-void take_input(char *input_line, int *size, FILE *stream)
+int take_input(char *input_line, int *size, FILE *stream)
 {
+  int result = false;
   /*
   Remember that
     - sscanf() reads formatted input from a string.
     - scanf() reads formatted input from stdin.
   */
   /*
-fgets() returns pointer to the string buffer if successful, NULL or if EOF or an error occurred
-TRUE if point
-FALSE if NULL or EOF
-*/
+  fgets() returns pointer to the string buffer if successful, NULL or if EOF or an error occurred
+  TRUE if point
+  FALSE if NULL or EOF
+  */
   if (fgets(input_line, *size, stream))
   {
     char input[256];      // actual converted value in a new variable, safer because it is a backup
@@ -73,19 +78,20 @@ FALSE if NULL or EOF
     */
     // Remember: no need to explicitly put &command_text[0] since in the variable command_text is stored the pointer to the first element
     int matches = sscanf(input_line, "%s %d", command_text, &command_num);
-
+    result = true; // let's continue executing sice we succesfully passed something to parse
     switch (matches)
     {
     case 1:
       if (strcmp(command_text, "print") == 0)
       {
+
         printf("Printing process tree...\n");
         // print_tree();
       }
       else if (strcmp(command_text, "quit") == 0)
       {
         printf("Quitting...\n");
-        // quit_program();
+        result = false;
       }
       else
       {
@@ -118,6 +124,7 @@ FALSE if NULL or EOF
   {
     printf("Wrong input!\nYour input: {%s}\n", input_line);
   }
+  return result;
 }
 
 void create_child_at_level(int *level)
@@ -132,12 +139,32 @@ void create_child_at_level(int *level)
   {
     printf("I cannot create a child at level 0!\n");
   }
-  if (figlio)
+
+  switch (figlio)
   {
+  case -1:
     /*
-    TRUE if different than 0
-    This means this is the parent
+    fork() returns -1 in case of error
+    so this is an error handling section
     */
+    printf("Error on fork() while creating a child\n");
+    break;
+
+  case 0:
+    /*
+    to the newly created child process fork() returns 0
+    so this is the child
+    */
+    sleep(1);
+    printf("Io sono il figlio e ho un genitore!\n");
+    printf("I miei dati:\nPID: {%d}\nPPID: {%d}\nFiglio: {%d}\n", getpid(), getppid(), figlio);
+    break;
+
+  default:
+    /*
+    to the parent fork() returns the pid of the newly created process
+    so this is the parent
+     */
     printf("Io sono il genitore e ho appena fatto un figlio al livello: {%d}\n", *level);
     (*level)--;
     printf("Prossimo livello: {%d}\n", *level);
@@ -146,16 +173,7 @@ void create_child_at_level(int *level)
     {
       create_child_at_level(level);
     }
-  }
-  else
-  {
-    /*
-    FALSE if it is 0
-    This means this is the child
-    */
-    sleep(1);
-    printf("Io sono il figlio e ho un genitore!\n");
-    printf("I miei dati:\nPID: {%d}\nPPID: {%d}\nFiglio: {%d}\n", getpid(), getppid(), figlio);
+    break;
   }
 }
 
