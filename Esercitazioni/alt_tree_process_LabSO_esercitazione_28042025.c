@@ -16,11 +16,12 @@ L’output del comando ‘p’ non deve essere ordinato ma deve essere ben chiar
 */
 
 // Include section
-#include <stdio.h>   // printf, sscanf
-#include <stdlib.h>  // atoi, rand, srand, malloc, free, exit, EXIT_SUCCESS, EXIT_FAILURE, size_t etc.
-#include <unistd.h>  // getpid, getppid
-#include <stdbool.h> // Boolean datatypes
-#include <string.h>  // strcmp
+#include <stdio.h>    // printf, sscanf
+#include <stdlib.h>   // atoi, rand, srand, malloc, free, exit, EXIT_SUCCESS, EXIT_FAILURE, size_t etc.
+#include <unistd.h>   // getpid, getppid
+#include <stdbool.h>  // Boolean datatypes
+#include <string.h>   // strcmp
+#include <sys/wait.h> // wait
 
 // Define section
 #define NULL_CHAR '\0'
@@ -94,10 +95,9 @@ FALSE if NULL or EOF
     case 2:
       if (strcmp(command_text, "child") == 0)
       {
-        printf("Creating %d child processes\n", command_num);
-        // Let's parse the input and choose what to do now
+        // let's create a single child at level n
+        printf("Creating a child at level: {%d}\n", command_num);
         create_child_at_level(&command_num);
-        // create_child(number);
       }
       else if (strcmp(command_text, "kill") == 0)
       {
@@ -122,7 +122,41 @@ FALSE if NULL or EOF
 
 void create_child_at_level(int *level)
 {
-  printf("Inside function! Level: {%d}\n", *level);
+  printf("Creating child, levels to descend: {%d}\n", *level);
+  pid_t figlio = -1; // fork() returns -1 in case of error
+  if ((*level) > 0)
+  {
+    figlio = fork();
+  }
+  else
+  {
+    printf("I cannot create a child at level 0!\n");
+  }
+  if (figlio)
+  {
+    /*
+    TRUE if different than 0
+    This means this is the parent
+    */
+    printf("Io sono il genitore e ho appena fatto un figlio al livello: {%d}\n", *level);
+    (*level)--;
+    printf("Prossimo livello: {%d}\n", *level);
+    printf("I miei dati:\nPID: {%d}\nPPID: {%d}\nFiglio: {%d}\n", getpid(), getppid(), figlio);
+    if (*level > 0)
+    {
+      create_child_at_level(level);
+    }
+  }
+  else
+  {
+    /*
+    FALSE if it is 0
+    This means this is the child
+    */
+    sleep(1);
+    printf("Io sono il figlio e ho un genitore!\n");
+    printf("I miei dati:\nPID: {%d}\nPPID: {%d}\nFiglio: {%d}\n", getpid(), getppid(), figlio);
+  }
 }
 
 bool is_number(char *c)
