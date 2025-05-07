@@ -31,7 +31,7 @@ L’output del comando ‘p’ non deve essere ordinato ma deve essere ben chiar
 // Function declaration section
 int take_input(char *input_line, int *size, FILE *stream);
 bool is_number(char *c);
-void create_child_at_level(int *level);
+void create_child_at_level(int *levels_to_descend);
 
 int main()
 {
@@ -39,16 +39,19 @@ int main()
   printf("PID: [%d]\n", getpid()); // It works also without <unistd.h> but it gives a warning
   printf("PPID: [%d]\n", getppid());
 
+  // counter to print how many commands have been sent
   int operation_counter = 0;
+  bool exit = false;
 
-  printf("Waiting for user input, choose between:\n - child n\n - kill n\n - print\n - quit\n> ");
   char input_line[256]; // max input line dimension
   int input_line_dim = sizeof(input_line);
-  while (take_input(input_line, &input_line_dim, stdin))
+  do
   {
-    printf("Operation #%d\n", operation_counter);
-  }
-
+    printf("\nCurrent operation: #%d\n", operation_counter);
+    printf("Waiting for user input, choose between:\n - child n\n - kill n\n - print\n - quit\n> ");
+    exit = take_input(input_line, &input_line_dim, stdin);
+    operation_counter++;
+  } while (exit);
   return EXIT_SUCCESS;
 }
 
@@ -127,11 +130,28 @@ int take_input(char *input_line, int *size, FILE *stream)
   return result;
 }
 
-void create_child_at_level(int *level)
+void create_child_at_level(int *levels_to_descend)
 {
-  printf("Creating child, levels to descend: {%d}\n", *level);
+  /*
+    For getpid() and getppid() it's important to remember that if we save them in a variable and then we call fork()
+    they will always be the same, so we need to call getpid() again to know the child pid.
+    Moreover if the parent process ends before the child then the child will be re-parented under another process
+  */
+
+  /*
+    We need childs to not do anything, only the parent is responsible of everything.
+    So let's make the childs wait for a signal, and the only signal they will receive is when they terminate.
+    Let's create a custom data structure of type sigset_t to edit the signal mask, remember that this-
+      is the only way to edit the signal mask as it is not directly accessible.
+  */
+  sigset_t sigset_figlio;
+  int signal_received;
+  sigemptyset(&sigset_figlio);        // let's ensure the new signal mask is empty before we edit it
+  sigaddset(&sigset_figlio, SIGTERM); // adding SIGTERM, the default software termination signal
+
+  printf("Creating child, levels to descend: {%d}\n", *levels_to_descend);
   pid_t figlio = -1; // fork() returns -1 in case of error
-  if ((*level) > 0)
+  if ((*levels_to_descend) > 0)
   {
     figlio = fork();
   }
@@ -155,9 +175,11 @@ void create_child_at_level(int *level)
     to the newly created child process fork() returns 0
     so this is the child
     */
-    sleep(1);
-    printf("Io sono il figlio e ho un genitore!\n");
-    printf("I miei dati:\nPID: {%d}\nPPID: {%d}\nFiglio: {%d}\n", getpid(), getppid(), figlio);
+    printf("\nSono un figlio: levels_to_descend{%d}, PID{%d}, PPID{%d}\n", *levels_to_descend, getpid(), getppid());
+    do
+    {
+      // do nothing for now
+    } while (sigwait(&sigset_figlio, &signal_received) == 0); // sigwait() returns 0 on success
     break;
 
   default:
@@ -165,13 +187,14 @@ void create_child_at_level(int *level)
     to the parent fork() returns the pid of the newly created process
     so this is the parent
      */
-    printf("Io sono il genitore e ho appena fatto un figlio al livello: {%d}\n", *level);
-    (*level)--;
-    printf("Prossimo livello: {%d}\n", *level);
-    printf("I miei dati:\nPID: {%d}\nPPID: {%d}\nFiglio: {%d}\n", getpid(), getppid(), figlio);
-    if (*level > 0)
+    sleep(1);
+    printf("Io sono il genitore e ho appena fatto un figlio al livello: {%d}\n", *levels_to_descend);
+    (*levels_to_descend)--;
+    printf("Prossimo livello: {%d}\n", *levels_to_descend);
+    printf("I miei dati: PID{%d} PPID{%d} Figlio{%d}\n", getpid(), getppid(), figlio);
+    if (*levels_to_descend > 0)
     {
-      create_child_at_level(level);
+      create_child_at_level(levels_to_descend);
     }
     break;
   }
