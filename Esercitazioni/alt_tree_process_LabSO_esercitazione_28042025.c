@@ -29,34 +29,71 @@ L’output del comando ‘p’ non deve essere ordinato ma deve essere ben chiar
 #define ASCII_9 57
 
 // Function declaration section
-int take_input(char *input_line, int *size, FILE *stream);
+int take_input(char *input_line, int *size, FILE *stream, pid_t *origin);
 bool is_number(char *c);
-void create_child_at_level(int *levels_to_descend);
+void create_child_at_level(int *levels_to_descend, pid_t *origin);
+void handler_origin(int signo, siginfo_t *info, void *empty);
 
 int main()
 {
+  // scope: main
+  /*
+    Origin signal mask
+    Here I want to make the original process wait for a signal sent by the child before printing again
+    Let's create a custom data structure of type sigset_t to edit the signal mask, remember that this-
+      is the only way to edit the signal mask as it is not directly accessible.
+  */
+  sigset_t sigset_origin;
+  int signal_origin;
+
+  sigemptyset(&sigset_origin);        // let's ensure the new signal mask is empty before we edit it
+  sigaddset(&sigset_origin, SIGUSR1); // adding SIGUSR1, the child will send it when he is done
+  sigprocmask(SIG_BLOCK, &sigset_origin, NULL);
+  /*
+    Origin signal handling
+    Here I want to handle the signal SIGUSR1
+  */
+  struct sigaction sa_origin;
+  sa_origin.sa_sigaction = handler_origin;
+  sa_origin.sa_flags = SA_SIGINFO;      // use sa_sigaction
+  sa_origin.sa_mask = sigset_origin;    // use the custom mask we defined before
+  sigaction(SIGUSR1, &sa_origin, NULL); // set our custom handler for SIGUSR1
+
+  pid_t origin = getpid(); // the original process PID
+
   printf("- - - S T A R T - - -\n");
-  printf("PID: [%d]\n", getpid()); // It works also without <unistd.h> but it gives a warning
+  printf("PID: [%d]\n", origin); // It works also without <unistd.h> but it gives a warning
   printf("PPID: [%d]\n", getppid());
 
   // counter to print how many commands have been sent
-  int operation_counter = 0;
+  int operation_counter = 1;
   bool exit = false;
 
   char input_line[256]; // max input line dimension
   int input_line_dim = sizeof(input_line);
   do
   {
-    printf("\nCurrent operation: #%d\n", operation_counter);
-    printf("Waiting for user input, choose between:\n - child n\n - kill n\n - print\n - quit\n> ");
-    exit = take_input(input_line, &input_line_dim, stdin);
-    operation_counter++;
+    if (origin == getpid())
+    {
+      printf("\nCurrent operation: #%d\n", operation_counter);
+      printf("Waiting for user input, choose between:\n - child n\n - kill n\n - print\n - quit\n> ");
+      exit = take_input(input_line, &input_line_dim, stdin, &origin);
+      operation_counter++;
+      if (sigwait(&sigset_origin, &signal_origin) == 0)
+      {
+        printf("sigwait works\n");
+      }
+      else
+      {
+        perror("sigwait failed\n");
+      }
+    }
   } while (exit);
   return EXIT_SUCCESS;
 }
 
 // Function definition section
-int take_input(char *input_line, int *size, FILE *stream)
+int take_input(char *input_line, int *size, FILE *stream, pid_t *origin)
 {
   int result = false;
   /*
@@ -98,7 +135,7 @@ int take_input(char *input_line, int *size, FILE *stream)
       }
       else
       {
-        printf("Unknown command: %s\n", command_text);
+        printf("Unknown command: %s\n", input_line);
       }
       break;
     case 2:
@@ -106,7 +143,7 @@ int take_input(char *input_line, int *size, FILE *stream)
       {
         // let's create a single child at level n
         printf("Creating a child at level: {%d}\n", command_num);
-        create_child_at_level(&command_num);
+        create_child_at_level(&command_num, origin);
       }
       else if (strcmp(command_text, "kill") == 0)
       {
@@ -115,7 +152,7 @@ int take_input(char *input_line, int *size, FILE *stream)
       }
       else
       {
-        printf("Unknown command with number: %d\n", command_num);
+        printf("Unknown command: %s\n", input_line);
       }
       break;
     default:
@@ -130,7 +167,7 @@ int take_input(char *input_line, int *size, FILE *stream)
   return result;
 }
 
-void create_child_at_level(int *levels_to_descend)
+void create_child_at_level(int *levels_to_descend, pid_t *origin)
 {
   /*
     For getpid() and getppid() it's important to remember that if we save them in a variable and then we call fork()
@@ -139,13 +176,13 @@ void create_child_at_level(int *levels_to_descend)
   */
 
   /*
-    We need childs to not do anything, only the parent is responsible of everything.
+    The childs need to do nothing and wait for the termination signal, only the parent is responsible of stdin/stdout.
     So let's make the childs wait for a signal, and the only signal they will receive is when they terminate.
     Let's create a custom data structure of type sigset_t to edit the signal mask, remember that this-
       is the only way to edit the signal mask as it is not directly accessible.
   */
   sigset_t sigset_figlio;
-  int signal_received;
+  int signal_figlio;
   sigemptyset(&sigset_figlio);        // let's ensure the new signal mask is empty before we edit it
   sigaddset(&sigset_figlio, SIGTERM); // adding SIGTERM, the default software termination signal
 
@@ -158,6 +195,7 @@ void create_child_at_level(int *levels_to_descend)
   else
   {
     printf("I cannot create a child at level 0!\n");
+    kill(*origin, SIGUSR1); // tell the parent that we are done
   }
 
   switch (figlio)
@@ -175,11 +213,23 @@ void create_child_at_level(int *levels_to_descend)
     to the newly created child process fork() returns 0
     so this is the child
     */
-    printf("\nSono un figlio: levels_to_descend{%d}, PID{%d}, PPID{%d}\n", *levels_to_descend, getpid(), getppid());
+    (*levels_to_descend)--;
+    printf("\nSono un figlio:\n\tlevels_to_descend{%d}, PID{%d}, PPID{%d}\n", *levels_to_descend, getpid(), getppid());
+    if ((*levels_to_descend) > 0)
+    {
+      printf("Sono un figlio e sto facendo un altro figlio!\n");
+      create_child_at_level(levels_to_descend, origin);
+    }
+    else
+    {
+      printf("Sono un figlio e non ci sono più figli da fare!\n");
+    }
+    kill(*origin, SIGUSR1); // before waiting indefinetly let's tell the parent that we are done
+
     do
     {
       // do nothing for now
-    } while (sigwait(&sigset_figlio, &signal_received) == 0); // sigwait() returns 0 on success
+    } while (sigwait(&sigset_figlio, &signal_figlio) == 0); // sigwait() returns 0 on success
     break;
 
   default:
@@ -187,15 +237,7 @@ void create_child_at_level(int *levels_to_descend)
     to the parent fork() returns the pid of the newly created process
     so this is the parent
      */
-    sleep(1);
-    printf("Io sono il genitore e ho appena fatto un figlio al livello: {%d}\n", *levels_to_descend);
-    (*levels_to_descend)--;
-    printf("Prossimo livello: {%d}\n", *levels_to_descend);
-    printf("I miei dati: PID{%d} PPID{%d} Figlio{%d}\n", getpid(), getppid(), figlio);
-    if (*levels_to_descend > 0)
-    {
-      create_child_at_level(levels_to_descend);
-    }
+    printf("Sono un genitore:\n\tlevels_to_descend{%d}, PID{%d}, PPID{%d}, Figlio{%d}\n", *levels_to_descend, getpid(), getppid(), figlio);
     break;
   }
 }
@@ -208,4 +250,18 @@ bool is_number(char *c)
     result = true;
   }
   return result;
+}
+
+void handler_origin(int signo, siginfo_t *info, void *empty)
+{
+  switch (signo)
+  {
+  case 10:
+    printf("\nSIGSUR1 received!\n");
+    break;
+
+  default:
+    printf("\nsignal unknown: {%d}", signo);
+    break;
+  }
 }
