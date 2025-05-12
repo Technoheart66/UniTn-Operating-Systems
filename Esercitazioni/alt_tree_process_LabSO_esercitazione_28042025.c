@@ -46,12 +46,14 @@ int main()
   sigset_t sigset_origin;
   int signal_origin;
 
-  sigemptyset(&sigset_origin);        // let's ensure the new signal mask is empty before we edit it
-  sigaddset(&sigset_origin, SIGUSR1); // adding SIGUSR1, the child will send it when he is done
-  sigprocmask(SIG_BLOCK, &sigset_origin, NULL);
+  sigemptyset(&sigset_origin);                  // let's ensure the new signal mask is empty before we edit it
+  sigaddset(&sigset_origin, SIGUSR1);           // adding SIGUSR1, the child will send it when he is done
+  sigprocmask(SIG_BLOCK, &sigset_origin, NULL); // apply the new set, this will change the current mask
+
   /*
     Origin signal handling
     Here I want to handle the signal SIGUSR1
+    Notice how we set the struct mask to the new mask defined above!
   */
   struct sigaction sa_origin;
   sa_origin.sa_sigaction = handler_origin;
@@ -59,7 +61,7 @@ int main()
   sa_origin.sa_mask = sigset_origin;    // use the custom mask we defined before
   sigaction(SIGUSR1, &sa_origin, NULL); // set our custom handler for SIGUSR1
 
-  pid_t origin = getpid(); // the original process PID
+  pid_t origin = getpid(); // the original process PID, will be shared beteen forked processes
 
   printf("- - - S T A R T - - -\n");
   printf("PID: [%d]\n", origin); // It works also without <unistd.h> but it gives a warning
@@ -81,11 +83,12 @@ int main()
       operation_counter++;
       if (sigwait(&sigset_origin, &signal_origin) == 0)
       {
-        printf("sigwait works\n");
+        printf("-> sigwait works\n");
+        sleep(1);
       }
       else
       {
-        perror("sigwait failed\n");
+        perror("-> sigwait failed\n");
       }
     }
   } while (exit);
@@ -126,16 +129,21 @@ int take_input(char *input_line, int *size, FILE *stream, pid_t *origin)
       {
 
         printf("Printing process tree...\n");
+        // result is already true let's continue
+        kill(*origin, SIGUSR1); // tell the parent that we are done
         // print_tree();
       }
       else if (strcmp(command_text, "quit") == 0)
       {
         printf("Quitting...\n");
-        result = false;
+        result = false;         // set the return value to false so that the origin can understand to terminate
+        kill(*origin, SIGUSR1); // tell the parent that we are done
       }
       else
       {
         printf("Unknown command: %s\n", input_line);
+        kill(*origin, SIGUSR1); // tell the parent that we are done
+        // result is already true let's continue
       }
       break;
     case 2:
@@ -143,26 +151,32 @@ int take_input(char *input_line, int *size, FILE *stream, pid_t *origin)
       {
         // let's create a single child at level n
         printf("Creating a child at level: {%d}\n", command_num);
-        create_child_at_level(&command_num, origin);
+        create_child_at_level(&command_num, origin); // signals are sent inside this function
+        // result is already true, let's continue
       }
       else if (strcmp(command_text, "kill") == 0)
       {
         printf("Killing processes at level %d\n", command_num);
         // kill_level(number);
+        // result is already true let's continue
       }
       else
       {
         printf("Unknown command: %s\n", input_line);
+        // result is already true, let's continue
+        kill(*origin, SIGUSR1); // tell the parent that we are done
       }
       break;
     default:
       printf("There was an error parsing user input\n");
+      kill(*origin, SIGUSR1); // tell the parent that we are done
       break;
     }
   }
   else
   {
-    printf("Wrong input!\nYour input: {%s}\n", input_line);
+    printf("\nWrong input!\nYour input: {%s}\nQuitting...\n", input_line);
+    kill(*origin, SIGUSR1); // tell the parent that we are done
   }
   return result;
 }
