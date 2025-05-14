@@ -1,4 +1,4 @@
-//sigaction3.c
+// sigaction3.c
 #include <signal.h>
 #include <unistd.h>
 #include <stdlib.h>
