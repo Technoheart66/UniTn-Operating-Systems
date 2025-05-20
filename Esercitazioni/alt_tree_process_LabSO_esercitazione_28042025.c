@@ -28,11 +28,21 @@ L’output del comando ‘p’ non deve essere ordinato ma deve essere ben chiar
 #define ASCII_0 48
 #define ASCII_9 57
 
+// I need a way to store each child information, so let's do a linked list
+typedef struct node
+{
+  int level;
+  pid_t pid;
+  struct node *next;
+} node_t;
+
 // Function declaration section
-int take_input(char *input_line, int *size, FILE *stream, pid_t *origin);
+int take_input(char *input_line, int *size, FILE *stream, pid_t *origin, node_t *head);
 bool is_number(char *c);
-void create_child_at_level(int *levels_to_descend, pid_t *origin);
+int create_child_at_level(int *input_level, pid_t *origin, node_t **head);
 void handler_origin(int signo, siginfo_t *info, void *empty);
+void print_tree(node_t *head, pid_t *origin); // unordered
+void quit(node_t *head, pid_t *origin);
 
 int main()
 {
@@ -73,18 +83,24 @@ int main()
 
   char input_line[256]; // max input line dimension
   int input_line_dim = sizeof(input_line);
+
+  node_t *head = NULL;
+  head = (node_t *)malloc(sizeof(node_t));
+  head->level = 0;
+  head->next = NULL;
+
   do
   {
     if (origin == getpid())
     {
+      sleep(1);
       printf("\nCurrent operation: #%d\n", operation_counter);
       printf("Waiting for user input, choose between:\n - child n\n - kill n\n - print\n - quit\n> ");
-      exit = take_input(input_line, &input_line_dim, stdin, &origin);
+      exit = take_input(input_line, &input_line_dim, stdin, &origin, head);
       operation_counter++;
       if (sigwait(&sigset_origin, &signal_origin) == 0)
       {
         printf("-> sigwait works\n");
-        sleep(1);
       }
       else
       {
@@ -96,7 +112,7 @@ int main()
 }
 
 // Function definition section
-int take_input(char *input_line, int *size, FILE *stream, pid_t *origin)
+int take_input(char *input_line, int *size, FILE *stream, pid_t *origin, node_t *head)
 {
   int result = false;
   /*
@@ -116,72 +132,56 @@ int take_input(char *input_line, int *size, FILE *stream, pid_t *origin)
     int command_num;      // store the integer command value here
     /*
     sscanf() function returns the number of fields that were successfully converted and assigned
-    TRUE if it successfully converted and assigned to a variable
-    FALSE otherwise
+    n if it successfully converted and assigned to n variable up to that point
+    EOF it it couldn't assign any input to a variable
     */
     // Remember: no need to explicitly put &command_text[0] since in the variable command_text is stored the pointer to the first element
     int matches = sscanf(input_line, "%s %d", command_text, &command_num);
-    result = true; // let's continue executing sice we succesfully passed something to parse
+    result = true; // continue unless specified otherwise
     switch (matches)
     {
     case 1:
       if (strcmp(command_text, "print") == 0)
       {
-
-        printf("Printing process tree...\n");
-        // result is already true let's continue
-        kill(*origin, SIGUSR1); // tell the parent that we are done
-        // print_tree();
+        print_tree(head, origin);
       }
       else if (strcmp(command_text, "quit") == 0)
       {
-        printf("Quitting...\n");
-        result = false;         // set the return value to false so that the origin can understand to terminate
-        kill(*origin, SIGUSR1); // tell the parent that we are done
+        quit(head, origin); // inside here every node should be freed
+        result = false;
       }
       else
       {
         printf("Unknown command: %s\n", input_line);
-        kill(*origin, SIGUSR1); // tell the parent that we are done
-        // result is already true let's continue
       }
       break;
     case 2:
       if (strcmp(command_text, "child") == 0)
       {
-        // let's create a single child at level n
-        printf("Creating a child at level: {%d}\n", command_num);
-        create_child_at_level(&command_num, origin); // signals are sent inside this function
-        // result is already true, let's continue
+        create_child_at_level(&command_num, origin, &head); // signals are sent inside this function
       }
       else if (strcmp(command_text, "kill") == 0)
       {
-        printf("Killing processes at level %d\n", command_num);
-        // kill_level(number);
-        // result is already true let's continue
+        // kill
       }
       else
       {
-        printf("Unknown command: %s\n", input_line);
-        // result is already true, let's continue
-        kill(*origin, SIGUSR1); // tell the parent that we are done
+        printf("Unknown command: %s\n", input_line); // two parameters but unknown commands or bad format
       }
       break;
     default:
       printf("There was an error parsing user input\n");
-      kill(*origin, SIGUSR1); // tell the parent that we are done
       break;
     }
   }
   else
   {
     printf("\nWrong input!\nYour input: {%s}\nQuitting...\n", input_line);
-    kill(*origin, SIGUSR1); // tell the parent that we are done
   }
   return result;
 }
 
-void create_child_at_level(int *levels_to_descend, pid_t *origin)
+int create_child_at_level(int *input_level, pid_t *origin, node_t **head)
 {
   /*
     For getpid() and getppid() it's important to remember that if we save them in a variable and then we call fork()
@@ -195,65 +195,96 @@ void create_child_at_level(int *levels_to_descend, pid_t *origin)
     Let's create a custom data structure of type sigset_t to edit the signal mask, remember that this-
       is the only way to edit the signal mask as it is not directly accessible.
   */
-  sigset_t sigset_figlio;
-  int signal_figlio;
+  int result = 0;         // final result of this function
+  sigset_t sigset_figlio; // signal mask set
+  int signal_figlio;      // store the signal number received using sigwait()
+
   sigemptyset(&sigset_figlio);        // let's ensure the new signal mask is empty before we edit it
   sigaddset(&sigset_figlio, SIGTERM); // adding SIGTERM, the default software termination signal
 
-  printf("Creating child, levels to descend: {%d}\n", *levels_to_descend);
-  pid_t figlio = -1; // fork() returns -1 in case of error
-  if ((*levels_to_descend) > 0)
+  node_t *current = (*head);
+  // new node
+  node_t *new_node = (node_t *)malloc(sizeof(node_t));
+  if (new_node == NULL)
   {
-    figlio = fork();
+    fprintf(stderr, "Failed to allocate memory for new node\n");
+    result = 1;
   }
   else
   {
-    printf("I cannot create a child at level 0!\n");
-    kill(*origin, SIGUSR1); // tell the parent that we are done
-  }
+    new_node->next = NULL;
+    new_node->level = -1;
 
-  switch (figlio)
-  {
-  case -1:
-    /*
-    fork() returns -1 in case of error
-    so this is an error handling section
-    */
-    printf("Error on fork() while creating a child\n");
-    break;
-
-  case 0:
-    /*
-    to the newly created child process fork() returns 0
-    so this is the child
-    */
-    (*levels_to_descend)--;
-    printf("\nSono un figlio:\n\tlevels_to_descend{%d}, PID{%d}, PPID{%d}\n", *levels_to_descend, getpid(), getppid());
-    if ((*levels_to_descend) > 0)
+    // !!! IMPORTANT !!!
+    // travel to the last node of the desired level
+    while (current->next != NULL && current->level <= *input_level && current->next->level <= *input_level)
     {
-      printf("Sono un figlio e sto facendo un altro figlio!\n");
-      create_child_at_level(levels_to_descend, origin);
+      current = current->next;
+    }
+
+    // initialize the new node, corner-case: only origin
+    if (current->level < *input_level)
+    {
+      new_node->level = current->level + 1;
     }
     else
     {
-      printf("Sono un figlio e non ci sono più figli da fare!\n");
+      new_node->level = current->level;
     }
-    kill(*origin, SIGUSR1); // before waiting indefinetly let's tell the parent that we are done
 
-    do
+    // insert the new node in the list
+    new_node->next = current->next;
+    current->next = new_node;
+
+    pid_t figlio = -1; // fork() returns -1 in case of error
+    if ((*input_level) > 0)
     {
-      // do nothing for now
-    } while (sigwait(&sigset_figlio, &signal_figlio) == 0); // sigwait() returns 0 on success
-    break;
+      printf("Creating child, levels to descend: {%d}\n", *input_level);
+      figlio = fork();
+    }
+    else
+    {
+      printf("Cannot create a child at input_level %d\nUsage: child n, with n>0\nThere can be only one origin at level 0 and no childs before it\n", *input_level);
+      kill(*origin, SIGUSR1); // tell the parent that we are done
+    }
 
-  default:
-    /*
-    to the parent fork() returns the pid of the newly created process
-    so this is the parent
-     */
-    printf("Sono un genitore:\n\tlevels_to_descend{%d}, PID{%d}, PPID{%d}, Figlio{%d}\n", *levels_to_descend, getpid(), getppid(), figlio);
-    break;
+    switch (figlio)
+    {
+    case -1: // fork() returns -1 in case of error
+      printf("Error on fork() while creating a child\n");
+      break;
+
+    case 0: // fork() returns 0 to the child
+    {
+      printf("\nSono un figlio:\n\tinput_level{%d}, new_node->level{%d}, PID{%d}, PPID{%d}\n", *input_level, new_node->level, getpid(), getppid());
+      if (new_node->level < *input_level)
+      {
+        printf("Sto facendo un altro figlio, devo arrivare al livello giusto\n");
+        create_child_at_level(input_level, origin, head);
+      }
+      else
+      {
+        printf("Sono arrivato al livello giusto!\n");
+      }
+      kill(*origin, SIGUSR1); // before waiting indefinetly let's tell the parent that we are done
+
+      do
+      {
+        // do nothing for now
+      } while (sigwait(&sigset_figlio, &signal_figlio) == 0); // sigwait() returns 0 on success
+      break;
+    }
+
+    default:
+      /*
+      to the parent fork() returns the pid of the newly created process
+      so this is the parent
+       */
+      printf("Sono un genitore:\n\tinput_level{%d}, current->level{%d},PID{%d}, PPID{%d}, Figlio{%d}\n", *input_level, current->level, getpid(), getppid(), figlio);
+      break;
+    }
   }
+  return result;
 }
 
 bool is_number(char *c)
@@ -277,5 +308,42 @@ void handler_origin(int signo, siginfo_t *info, void *empty)
   default:
     printf("\nsignal unknown: {%d}", signo);
     break;
+  }
+}
+
+void print_tree(node_t *head, pid_t *origin)
+{
+  if (*origin == getpid())
+  {
+    printf("printing...\n");
+    node_t *current = head;
+    while (current != NULL)
+    {
+      for (int i = 0; i < current->level; i++)
+      {
+        printf(" - ");
+      }
+      printf("[PID: %d, ", getpid());
+      if (getpid() == *origin)
+      {
+        printf("PPID: 0, ");
+      }
+      else
+      {
+        printf("PPID: %d, ", getppid());
+      }
+      printf("Depth: %d]\n", current->level);
+      current = current->next;
+    }
+    kill(*origin, SIGUSR1); // tell the parent that we are done
+  }
+}
+
+void quit(node_t *head, pid_t *origin)
+{
+  if (*origin == getpid())
+  {
+    printf("quitting...\n");
+    kill(*origin, SIGUSR1); // tell the parent that we are done
   }
 }
