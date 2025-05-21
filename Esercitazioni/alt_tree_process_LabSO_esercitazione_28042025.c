@@ -33,13 +33,14 @@ typedef struct node
 {
   int level;
   pid_t pid;
+  pid_t ppid;
   struct node *next;
 } node_t;
 
 // Function declaration section
 int take_input(char *input_line, int *size, FILE *stream, pid_t *origin, node_t *head);
 bool is_number(char *c);
-int create_child_at_level(int *input_level, pid_t *origin, node_t **head);
+int create_child_at_level(int *input_level, pid_t *origin, node_t *head);
 void handler_origin(int signo, siginfo_t *info, void *empty);
 void print_tree(node_t *head, pid_t *origin); // unordered
 void quit(node_t *head, pid_t *origin);
@@ -88,6 +89,7 @@ int main()
   head = (node_t *)malloc(sizeof(node_t));
   head->level = 0;
   head->next = NULL;
+  head->pid = origin;
 
   do
   {
@@ -152,13 +154,14 @@ int take_input(char *input_line, int *size, FILE *stream, pid_t *origin, node_t 
       }
       else
       {
-        printf("Unknown command: %s\n", input_line);
+        printf("Unknown command\n");
+        kill(*origin, SIGUSR1);
       }
       break;
     case 2:
       if (strcmp(command_text, "child") == 0)
       {
-        create_child_at_level(&command_num, origin, &head); // signals are sent inside this function
+        create_child_at_level(&command_num, origin, head); // signals are sent inside this function
       }
       else if (strcmp(command_text, "kill") == 0)
       {
@@ -166,22 +169,25 @@ int take_input(char *input_line, int *size, FILE *stream, pid_t *origin, node_t 
       }
       else
       {
-        printf("Unknown command: %s\n", input_line); // two parameters but unknown commands or bad format
+        printf("Unknown command\n"); // two parameters but unknown commands or bad format
+        kill(*origin, SIGUSR1);
       }
       break;
     default:
-      printf("There was an error parsing user input\n");
+      printf("ERROR: error while parsing user input: %s\n", input_line);
+      kill(*origin, SIGUSR1);
       break;
     }
   }
   else
   {
-    printf("\nWrong input!\nYour input: {%s}\nQuitting...\n", input_line);
+    printf("ERROR: user input error: %s\n", input_line);
+    kill(*origin, SIGUSR1);
   }
   return result;
 }
 
-int create_child_at_level(int *input_level, pid_t *origin, node_t **head)
+int create_child_at_level(int *input_level, pid_t *origin, node_t *head)
 {
   /*
     For getpid() and getppid() it's important to remember that if we save them in a variable and then we call fork()
@@ -202,88 +208,84 @@ int create_child_at_level(int *input_level, pid_t *origin, node_t **head)
   sigemptyset(&sigset_figlio);        // let's ensure the new signal mask is empty before we edit it
   sigaddset(&sigset_figlio, SIGTERM); // adding SIGTERM, the default software termination signal
 
-  node_t *current = (*head);
-  // new node
-  node_t *new_node = (node_t *)malloc(sizeof(node_t));
-  if (new_node == NULL)
+  pid_t figlio = -1; // fork() returns -1 in case of error
+  if ((*input_level) > 0)
   {
-    fprintf(stderr, "Failed to allocate memory for new node\n");
-    result = 1;
-  }
-  else
-  {
-    new_node->next = NULL;
-    new_node->level = -1;
+    printf("Creating child, levels to descend: {%d}\n", *input_level);
+    figlio = fork();
 
-    // !!! IMPORTANT !!!
-    // travel to the last node of the desired level
-    while (current->next != NULL && current->level <= *input_level && current->next->level <= *input_level)
+    node_t *current = head;
+    // new node
+    node_t *new_node = (node_t *)malloc(sizeof(node_t));
+    if (new_node == NULL)
     {
-      current = current->next;
-    }
-
-    // initialize the new node, corner-case: only origin
-    if (current->level < *input_level)
-    {
-      new_node->level = current->level + 1;
+      fprintf(stderr, "Failed to allocate memory for new node\n");
+      result = 1;
     }
     else
     {
-      new_node->level = current->level;
-    }
+      new_node->next = NULL;
+      new_node->level = -1;
 
-    // insert the new node in the list
-    new_node->next = current->next;
-    current->next = new_node;
-
-    pid_t figlio = -1; // fork() returns -1 in case of error
-    if ((*input_level) > 0)
-    {
-      printf("Creating child, levels to descend: {%d}\n", *input_level);
-      figlio = fork();
-    }
-    else
-    {
-      printf("Cannot create a child at input_level %d\nUsage: child n, with n>0\nThere can be only one origin at level 0 and no childs before it\n", *input_level);
-      kill(*origin, SIGUSR1); // tell the parent that we are done
-    }
-
-    switch (figlio)
-    {
-    case -1: // fork() returns -1 in case of error
-      printf("Error on fork() while creating a child\n");
-      break;
-
-    case 0: // fork() returns 0 to the child
-    {
-      printf("\nSono un figlio:\n\tinput_level{%d}, new_node->level{%d}, PID{%d}, PPID{%d}\n", *input_level, new_node->level, getpid(), getppid());
-      if (new_node->level < *input_level)
+      // !!! IMPORTANT !!!
+      // travel to the last node of the desired level
+      while (current->next != NULL && current->level <= *input_level && current->next->level <= *input_level)
       {
-        printf("Sto facendo un altro figlio, devo arrivare al livello giusto\n");
-        create_child_at_level(input_level, origin, head);
+        current = current->next;
+      }
+
+      // initialize the new node, corner-case: only origin
+      if (current->level < *input_level)
+      {
+        new_node->level = current->level + 1;
       }
       else
       {
-        printf("Sono arrivato al livello giusto!\n");
+        new_node->level = current->level;
       }
-      kill(*origin, SIGUSR1); // before waiting indefinetly let's tell the parent that we are done
 
-      do
+      switch (figlio)
       {
-        // do nothing for now
-      } while (sigwait(&sigset_figlio, &signal_figlio) == 0); // sigwait() returns 0 on success
-      break;
-    }
+      case -1: // fork() returns -1 in case of error
+        printf("Error on fork() while creating a child\n");
+        break;
 
-    default:
-      /*
-      to the parent fork() returns the pid of the newly created process
-      so this is the parent
-       */
-      printf("Sono un genitore:\n\tinput_level{%d}, current->level{%d},PID{%d}, PPID{%d}, Figlio{%d}\n", *input_level, current->level, getpid(), getppid(), figlio);
-      break;
+      case 0: // fork() returns 0 to the child
+      {
+        printf("\nSono un figlio:\n\tinput_level{%d}, new_node->level{%d}, PID{%d}, PPID{%d}\n", *input_level, new_node->level, getpid(), getppid());
+        if (new_node->level < *input_level)
+        {
+          printf("Sto facendo un altro figlio, devo arrivare al livello giusto\n");
+          create_child_at_level(input_level, origin, head);
+        }
+        else
+        {
+          printf("Sono arrivato al livello giusto!\n");
+        }
+        kill(*origin, SIGUSR1); // before waiting indefinetly let's tell the parent that we are done
+
+        do
+        {
+          // do nothing for now
+        } while (sigwait(&sigset_figlio, &signal_figlio) == 0); // sigwait() returns 0 on success
+        break;
+      }
+
+      default: // fork() returns the PID of the new child to the parent
+        // edit the node
+        new_node->pid = figlio;
+        new_node->ppid = getpid();
+        printf("Sono un genitore:\n\tinput_level{%d}, current->level{%d}, PID{%d}, PPID{%d}, Figlio{%d}\n", *input_level, current->level, getpid(), getppid(), figlio);
+        break;
+      }
     }
   }
+  else
+  {
+    printf("Cannot create a child at input_level{%d}\nThere can only be the origin at level 0 and no childs before it\nUSAGE: child n, with n>0\n", *input_level);
+    kill(*origin, SIGUSR1); // tell the parent that we are done
+  }
+
   return result;
 }
 
@@ -321,9 +323,13 @@ void print_tree(node_t *head, pid_t *origin)
     {
       for (int i = 0; i < current->level; i++)
       {
-        printf(" - ");
+        if (i == 0)
+        {
+          printf("|");
+        }
+        printf("--");
       }
-      printf("[PID: %d, ", getpid());
+      printf("[PID: %d, ", current->pid);
       if (getpid() == *origin)
       {
         printf("PPID: 0, ");
