@@ -44,6 +44,8 @@ Source: https://faculty.cs.niu.edu/~hutchins/csci480/signals.htm
 30 SIGPWR     Terminate   Power supply failure                 No
 31 SIGSYS     Dump        Bad system call                      No
 31 SIGUNUSED  Dump        Equivalent to SIGSYS                 No
+
+Also look at https://www.codequoi.com/en/sending-and-intercepting-a-signal-in-c/#list-of-signals-on-linux
 */
 
 #include <stdio.h>  //printf
