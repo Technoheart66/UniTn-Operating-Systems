@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
   case 0: // child, 0
     printf("I am the child\tPID: %d, PPID: %d, GID: %d\n", getpid(), getppid(), getpgid(0));
     printf("I will now become the group leader\n");
-    setpgid(0, 0); // Become group leader
+    setpgid(0, 0); // become group leader, same as setpgid(0, getpid())
     printf("I am the child\tPID: %d, PPID: %d, GID: %d\n", getpid(), getppid(), getpgid(0));
     break;
 
