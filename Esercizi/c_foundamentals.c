@@ -1,5 +1,23 @@
 // C_foundamentals.c
 
+// Section 0: copyright & licensing
+/*
+  Author: Francesco Dall'Agata
+  How to write a good c main function: https://opensource.com/article/19/5/how-write-good-c-main-function
+*/
+
+// Section 1: index
+// 0) copyright & licensing
+// 1) index
+// 2) assignment
+// 3) include
+// 4) define
+// 5) typedef
+// 6) external declaration
+// 7) function declaration
+// 8) main
+// 9) function definition
+
 // Macro and directives
 
 // Librerie essenziali
@@ -22,9 +40,9 @@
 #include <string.h>
 #include <signal.h> // signals
 #include <sys/syscall.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <time.h> // system calls for the time and random number generator
+#include <sys/types.h> // system programming types, size_t, pid_t, uid_t, may overlap with <types.h> and <stblib.h>
+#include <unistd.h>    // getpid(), getppid(), getpgid() etc.
+#include <time.h>      // system calls for the time and random number generator
 
 /*
 https://stackoverflow.com/questions/37538/how-do-i-determine-the-size-of-my-array-in-c
@@ -103,7 +121,8 @@ int main(int argc, char *argv[])
   }
 
   // string.h
-
+  printf("\nLet's dive in the library <string.H>\n");
+  printf("Also remember snprintf!\n"); // snprintf: https://www.quora.com/How-can-I-alter-a-string-in-c-program
   // char * strncat(char *dest, const char *src,size_t n)
   char *paperino = "paperino";
   char copia[30];                                                                     // lunghezza 50 byte, 1 byte a carattere da definizione
@@ -118,7 +137,7 @@ int main(int argc, char *argv[])
   printf("Now we try to look for the character '.' in the string, using strchr()\n");
   char *ret = strchr(paperino, '.');
   printf("The string after |%c| is |%s|\n\tIt should be null since there is no '.'\n", '.', ret);
-  printf("Now we try to look for the character 'n' in the string, using strchr()\n");
+  printf("\nNow we try to look for the character 'n' in the string, using strchr()\n");
   ret = strchr(paperino, 'e');
   printf("The string after |%c| is |%s|\n\tIt should be 'erino'\n", 'n', ret);
   // int strcmp(const char *str1, const char *str2)
