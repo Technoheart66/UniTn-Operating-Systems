@@ -18,10 +18,7 @@
 // 8) main
 // 9) function definition
 
-// Macro and directives
-
-// Librerie essenziali
-/*
+/* Section 3: include
   It is possible to include libraries in two ways, such as
     - #include <stdio.h>
     - #include "stdio.h"
@@ -54,6 +51,12 @@ we could have done sizeof(a)/sizeof(int) but if the variable isn't of type int w
 
 int a[17];
 size_t n = NELEMS(a);
+*/
+
+/* Section 7: function declaration
+  Why should I put functions before the main?
+  Why should I split declaration and definition?
+  Answer: single-pass compilers vs multi-pass compilers, look at '6. Function prototypes' in https://opensource.com/article/19/5/how-write-good-c-main-function
 */
 
 int main(int argc, char *argv[])
@@ -120,8 +123,8 @@ int main(int argc, char *argv[])
     printf("You can also try to pass me some arguments\n");
   }
 
-  // string.h
-  printf("\nLet's dive in the library <string.H>\n");
+  // strings and library <string.h>
+  printf("\nLet's learn strings in c and dive in the library <string.h>\n");
   printf("Also remember snprintf!\n"); // snprintf: https://www.quora.com/How-can-I-alter-a-string-in-c-program
   // char * strncat(char *dest, const char *src,size_t n)
   char *paperino = "paperino";
