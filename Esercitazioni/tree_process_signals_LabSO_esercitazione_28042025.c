@@ -129,9 +129,11 @@ int take_input(char *input_line, int *size, FILE *stream, pid_t *origin, node_t 
   */
   if (fgets(input_line, *size, stream))
   {
-    char input[256];      // actual converted value in a new variable, safer because it is a backup
+    char input_copy[256]; // actual converted value in a new variable, safer because it is a backup
     char command_text[8]; // store the text command value here
     int command_num;      // store the integer command value here
+
+    snprintf(input_copy, sizeof(input_copy), "%s", input_line);
     /*
     sscanf() function returns the number of fields that were successfully converted and assigned
     n if it successfully converted and assigned to n variable up to that point
