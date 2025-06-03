@@ -1,10 +1,10 @@
 // simulazione_LabSO_26052025
 
-// Section 0: author
+// Section 0: author & copyright
 // Francesco Dall'Agata
 
 // Section 1: index
-// 0) author
+// 0) author & copyright
 // 1) index
 // 2) include
 // 3) define
@@ -30,9 +30,10 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <stdbool.h>
-#include <math.h> // floor(), ceil(), nearbyint(), remember to link with gcc <name.c> -lm
+#include <math.h> // floor(), ceil(), neabyint(), remember to link with gcc <name.c> -lm
 
 // Section 3: define
+#define _GNU_SOURCE // or _POSIX_C_SOURCE 200809L
 #define STR_FILE_LENGTH 50
 #define ELO_MIN 100
 #define ELO_MAX 4000
@@ -50,10 +51,12 @@ typedef struct node // I need a way to store each child information, so let's do
 volatile sig_atomic_t origin_PID; // volatile così il compilatore non può effettuare ottimizzazioni, sig_atomic_t così viene previsto l'accesso non sincronizzato (i.e. segnali)
 
 // Section 6: function declaration
-int check_preconditions(int *argc, char *argv[], int *numeroGiocatori, FILE *stream_arbitro); // controlli pre esecuzione
-int calculate_elo(int *min, int *max);                                                        // returns a pseudo-random number between min and max included
-void list_insert_child(node_t *head, pid_t *pid_child);
-void list_print(node_t *head);
+int check_preconditions(int *argc, char *argv[], int *numeroGiocatori, FILE *stream_arbitro); // controlli pre esecuzione, lettura parametri, lettura file, creazione fifo
+int get_random_int(int *min, int *max);                                                       // returns a pseudo-random number between min and max included
+void list_insert_child(node_t *head, pid_t *pid_child);                                       // inserts a child as a new node at the end of the list
+void list_print(node_t *head);                                                                // prints the whole list (of childs)
+int fai_giocare(node_t *head);                                                                // sends signals SIGUSR2, selects 2 childs (one and the next) until there is just 1 left
+void handler_giocatori(int signo, siginfo_t *info, void *empty);                              // signal handler of the childs "giocatori", handles SIGUSR2
 
 // Section 7: main
 int main(int argc, char *argv[])
@@ -64,6 +67,11 @@ int main(int argc, char *argv[])
     FILE *stream_arbitro = NULL; // primo parametro passato al programma: <arbitro>
     int numeroGiocatori = 0;     // secondo parametro passato al programma: <numeroGiocatori>
 
+    char *fifo_punteggio = "./tmp/fifo_punteggio";       // FIFO o pipe con nome, utilizzata successivamente per accordare i giocatori sul punteggio
+    if (mkfifo(fifo_punteggio, S_IRUSR | S_IWUSR) != -1) // origin process and children since they inherit UID of parent
+    {
+        printf("FIFO created succesfully...\n");
+    }
     node_t *lista = NULL; // I need to store child PIDs
     lista = (node_t *)malloc(sizeof(node_t));
     if (lista == NULL)
@@ -98,32 +106,6 @@ int main(int argc, char *argv[])
                     int elo = (i + 1) * 100; // deve essere != 0 e unico, è il metodo più semplice
                     fprintf(nuovoFile, "%d\n", elo);
                     fflush(nuovoFile);
-
-                    // I giocatori dovranno bloccare il segnale SIGUSR1
-                    sigset_t sigset_block_giocatori, sigset_old;
-                    int check_mask = 0;
-                    check_mask = sigemptyset(&sigset_block_giocatori);        // returns 0 upon success
-                    check_mask = sigaddset(&sigset_block_giocatori, SIGUSR1); // returns 0 upon successo
-                    if (check_mask == 0 && sigismember(&sigset_block_giocatori, SIGUSR1) == 1)
-                    {
-                        printf("setting sigprocmask\n");
-                        sigprocmask(SIG_BLOCK, &sigset_block_giocatori, &sigset_old);
-                        sigset_t sigset_wait_giocatori;
-                        check_mask = sigfillset(&sigset_wait_giocatori);         // let's bloack everything
-                        check_mask = sigdelset(&sigset_wait_giocatori, SIGUSR2); // only SIGUSR2 can go through
-                        if (check_mask == 0 && sigismember(&sigset_wait_giocatori, SIGUSR2) != 1)
-                        {
-                            printf("setting sigsuspend\n");
-                            do
-                            {
-                                sigsuspend(&sigset_wait_giocatori);
-                            } while (true);
-                        }
-                    }
-                    else
-                    {
-                        printf("ERROR: custom signal mask error\n");
-                    }
                 }
                 else
                 {
@@ -133,18 +115,76 @@ int main(int argc, char *argv[])
                 break;
 
             default: // fork() ritorna al genitore il PID del processo appena creato
-                // parent
+                // origin
                 list_insert_child(lista, &child);
                 break;
             }
         } // ora abbiamo finito di generare i figli e di registrarli
 
-        pid_t child_terminating_pid = 0; // use with wait()
-        int child_status = 0;
-        do
+        if (getpid() == origin_PID) // se sono il processo origine
         {
-            child_terminating_pid = wait(&child_status); // wait waits for a child process to terminate, and returns that child process's pid. On error (eg when there are no child processes), -1 is returned.
-        } while (child_terminating_pid > 0); // keeps waiting for child processes to finish, wait() returns error -1 if it fails meaning there are no more childs
+            // origin parent
+            sleep(1);
+            do
+            {
+                // just send the signals until all childs are done
+            } while (fai_giocare(lista) != 0);
+
+            // send signals
+
+            // ensure all childs are done by waiting for all of them, then we can terminate
+            pid_t child_terminating_pid = 0; // use with wait()
+            int child_status = 0;
+
+            // keeps waiting for child processes to finish
+            do
+            {
+                // wait() will await for a child process to terminate, and returns that child process's pid. On error (eg when there are no child processes), -1 is returned.
+                child_terminating_pid = wait(&child_status);
+                printf("waiting childs...\nterminating...%d\n", child_terminating_pid);
+            } while (child_terminating_pid != -1);
+        }
+        else
+        {
+            // child
+
+            // I giocatori dovranno bloccare il segnale SIGUSR1
+            sigset_t sigset_block_giocatori, sigset_old;
+            int check_mask = 0;
+            check_mask = sigemptyset(&sigset_block_giocatori);        // returns 0 upon success
+            check_mask = sigaddset(&sigset_block_giocatori, SIGUSR1); // returns 0 upon successo
+            if (check_mask == 0 && sigismember(&sigset_block_giocatori, SIGUSR1) == 1)
+            {
+                sigprocmask(SIG_BLOCK, &sigset_block_giocatori, &sigset_old);
+                printf("succesfully set mask: block SIGUSR1\n");
+
+                // I giocatori dovranno rimanere in attesa del segnale SIGUSR2
+                sigset_t sigset_wait_giocatori;
+                check_mask = sigfillset(&sigset_wait_giocatori);         // let's bloack everything
+                check_mask = sigdelset(&sigset_wait_giocatori, SIGUSR2); // only SIGUSR2 can go through
+                if (check_mask == 0 && sigismember(&sigset_wait_giocatori, SIGUSR2) != 1)
+                {
+                    printf("succesfully set mask: sigsuspend SIGUSR2\n");
+
+                    // set up sigaction with SIGUSR2
+                    struct sigaction sa_giocatore, sa_oldact_giocatore;
+                    sa_giocatore.sa_sigaction = handler_giocatori;
+                    sa_giocatore.sa_flags = SA_SIGINFO; // Use sa_sigaction
+                    sigemptyset(&sa_giocatore.sa_mask); // Define an empty mask
+                    printf("succesfully set sigaction SIGUSR2\n");
+                    sigaction(SIGUSR2, &sa_giocatore, &sa_oldact_giocatore);
+                }
+                else
+                {
+                    printf("ERROR: couldn't set sigsuspend mask\n");
+                }
+                sigsuspend(&sigset_wait_giocatori);
+            }
+            else
+            {
+                printf("ERROR: couldn't block SIGUSR1\n");
+            }
+        }
     }
 
     return result;
@@ -168,6 +208,7 @@ int check_preconditions(int *argc, char *argv[], int *numeroGiocatori, FILE *str
         {
             if (*numeroGiocatori >= 2 && *numeroGiocatori <= 32)
             {
+                // okay
             }
             else
             {
@@ -191,18 +232,15 @@ int check_preconditions(int *argc, char *argv[], int *numeroGiocatori, FILE *str
     return result;
 }
 
-// get random number between [lower_limint, upper_limit] included
-int calculate_elo(int *lower_limit, int *upper_limit)
+// get random number between [min, max] included
+int get_random_int(int *min, int *max)
 {
-    float correct_elo = 0; // return value
+    int pseudo_random = 0; // return value
     // srand(time(NULL)); set seed with the current time, doesn't work because it's the same for all processes
-    srand(getpid() + time(NULL)); // set seed with getpid(), unique for each process
-
-    int pseudo_random = rand() % (*upper_limit + 1 - *lower_limit) + *lower_limit; // get a random number
-    correct_elo = pseudo_random / 100;                                             // divide everything by 100 to get a number to floor or ceil
-    correct_elo = nearbyintf(correct_elo);                                         // round the number to the closest integer value
-    correct_elo *= 100;                                                            // multiply again by 100 since thye have to be multiples of 100
-    return correct_elo;
+    srand(getpid() + time(NULL));                      // set seed with getpid(), unique for each process
+    pseudo_random = rand() % (*max + 1 - *min) + *min; // get a random number                                           // divide everything by 100 to get a number to floor or ceil
+    pseudo_random = nearbyintf(pseudo_random);         // round the number to the closest integer value
+    return pseudo_random;
 }
 
 // insert a node containing the child PID at the end of the list
@@ -239,6 +277,7 @@ void list_insert_child(node_t *head, pid_t *pid_child)
     }
 }
 
+// print the whole list in stdout
 void list_print(node_t *head)
 {
     node_t *current = head;
@@ -248,6 +287,100 @@ void list_print(node_t *head)
         printf("child PID: %d\n", current->pid);
         current = current->next;
     }
+}
+
+// send a signal SIGUSR2 to two child processes
+int fai_giocare(node_t *head)
+{
+    int result = -1; // default: fail
+    node_t *current = head;
+
+    while (current->next != NULL && getpid() == origin_PID)
+    {
+        printf("DEBUG: Sending SIGUSR2 to %d and %d\n", current->pid, current->next->pid); // debug
+        union sigval value;
+        value.sival_int = current->next->pid;
+        sigqueue(current->pid, SIGUSR2, value); // send SIGUSR2 to first child with PID of second child
+
+        value.sival_int = current->pid;
+        sigqueue(current->next->pid, SIGUSR2, value); // send SIGUSR2 to second child with PID of first child
+
+        current = current->next;
+        result = 0; // signal sent, set result to success status
+        sleep(1);
+    }
+
+    return result;
+}
+
+// receives SIGUSR2
+void handler_giocatori(int signo, siginfo_t *info, void *empty)
+{
+    char file_giocatore[STR_FILE_LENGTH]; // buffer per la stringa del file del giocatore
+    char file_avversario[STR_FILE_LENGTH];
+
+    printf("PID: %d: gioco contro %d\n", getpid(), info->si_value.sival_int);
+
+    snprintf(file_giocatore, STR_FILE_LENGTH, "./tmp/%d.txt", getpid());
+    snprintf(file_avversario, STR_FILE_LENGTH, "./tmp/%d.txt", info->si_value.sival_int);
+
+    FILE *stream_leggi = fopen(file_giocatore, "r");
+    FILE *stream_leggi_avversario = fopen(file_avversario, "r");
+    if (stream_leggi && stream_leggi_avversario)
+    {
+        char read_input[STR_FILE_LENGTH];
+        char read_input_avversario[STR_FILE_LENGTH];
+        int read_elo = 0;
+        int read_elo_avversario = 0;
+
+        if (fgets(read_input, sizeof(read_input), stream_leggi) && fgets(read_input_avversario, sizeof(read_input_avversario), stream_leggi_avversario))
+        {
+            int matches = sscanf(read_input, "%d", &read_elo);
+            int matches_avversario = sscanf(read_input_avversario, "%d", &read_elo_avversario);
+            int fifo_result;
+            char punteggio[STR_FILE_LENGTH];
+
+            if (matches == 1 && matches_avversario == 1) // 1 match, the variable has been assigned
+            {
+                if (read_elo > read_elo_avversario)
+                {
+                    printf("%d vinco, il mio elo era %d\n", getpid(), read_elo);
+                    // leggo su FIFO il punteggio dell'altro giocatore
+                    fifo_result = open("./tmp/fifo_punteggio", O_RDONLY); // open FIFO for read only
+                    read(fifo_result, punteggio, STR_FILE_LENGTH);
+                    close(fifo_result);
+                    printf("%d ho letto %s\n", getpid(), punteggio);
+                }
+                else
+                {
+                    printf("%d perdo, il mio elo era %d\n", getpid(), read_elo);
+                    int min_punti = 0;
+                    int max_punti = 10;
+                    // scrivo su FIFO il mio punteggio, il mio avversario avrà punteggio 11 siccome ha vinto
+                    snprintf(punteggio, sizeof(punteggio), "%d", get_random_int(&min_punti, &max_punti));
+                    fifo_result = open("./tmp/fifo_punteggio", O_WRONLY); // open FIFO for read only
+                    write(fifo_result, punteggio, STR_FILE_LENGTH);
+                    close(fifo_result);
+                    printf("%d ho scritto %s\n", getpid(), punteggio);
+                }
+            }
+            else
+            {
+                printf("ERROR: parsing elo\n");
+            }
+        }
+        else
+        {
+            printf("ERROR: file reading error while trying to read ELO\n");
+        }
+    }
+    else
+    {
+        printf("ERROR: couldn't open file streams\n");
+    }
+
+    fclose(stream_leggi);
+    fclose(stream_leggi_avversario);
 }
 
 // soluzione:

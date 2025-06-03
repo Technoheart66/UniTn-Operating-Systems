@@ -20,7 +20,7 @@ int main(void)
 {
   printf("This process has PID [%d]", getpid());
   struct sigaction sa;
-  sa.sa_handler = handler;
+  sa.sa_sigaction = handler;
   sa.sa_flags = 0;          // Initialise flags
   sigemptyset(&sa.sa_mask); // using 'sigemptyset' let's use an empty mask to block no signal
   sigaction(SIGUSR1, &sa, NULL);
