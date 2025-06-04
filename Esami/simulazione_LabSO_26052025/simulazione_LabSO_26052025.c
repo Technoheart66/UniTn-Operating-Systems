@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
             do
             {
                 // send the signals until all childs are done
-                list_remove_child();
+                //list_remove_child();
             } while (fai_giocare(lista) != 0);
 
             // send signals
