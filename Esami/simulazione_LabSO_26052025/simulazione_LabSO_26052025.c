@@ -74,6 +74,7 @@ void list_remove_child(node_t *head, pid_t *pid_child);                         
 // Section 7: main
 int main(int argc, char *argv[])
 {
+    printf("Sono l'arbitro %d\n", getpid());
     int result = EXIT_SUCCESS;   // valore di tirono della funzione main()
     origin_PID = getpid();       // memorizziamo il processo origine
     FILE *stream_arbitro = NULL; // primo parametro passato al programma: <arbitro>
@@ -110,7 +111,7 @@ int main(int argc, char *argv[])
             {
             case 0: // fork() ritorna 0 se il processo è figlio
                 // child
-
+                printf("Sono il figlio %d\n", getpid());
                 snprintf(file_giocatore, STR_FILE_LENGTH, "./tmp/%d.txt", getpid()); // nome del nuovo file, come specificato deve essere <mioPID>.txt
                 FILE *nuovoFile = fopen(file_giocatore, "w+");
                 if (nuovoFile != NULL)
@@ -150,11 +151,15 @@ int main(int argc, char *argv[])
             sigaction(SIGUSR2, &sa_origin, &sa_origin_old);
 
             sleep(1);
+            int esci = 0;
             do
             {
                 // send the signals until all childs are done
-                //list_remove_child();
-            } while (fai_giocare(lista) != 0);
+                esci = fai_giocare(lista);
+                pid_t to_be_removed = remove_PID;
+                list_remove_child(lista, &to_be_removed);
+
+            } while (esci != 0);
 
             // send signals
 
@@ -332,7 +337,7 @@ int fai_giocare(node_t *head)
         result = 0; // everything is done, set result to 0 to terminate
     }
 
-    if (current->next != NULL && getpid() == origin_PID)
+    if (current != NULL && current->next != NULL && getpid() == origin_PID)
     {
         printf("DEBUG: Sending SIGUSR2 to %d and %d\n", current->pid, current->next->pid); // debug
         union sigval value;
@@ -343,7 +348,6 @@ int fai_giocare(node_t *head)
         sigqueue(current->next->pid, SIGUSR2, value); // send SIGUSR2 to second child with PID of first child
 
         sleep(1);
-        result = 0;
     }
 
     return result;
@@ -440,6 +444,9 @@ void handler_giocatori(int signo, siginfo_t *info, void *empty)
                     {
                         printf("DEBUG: success, read message in queue, value: %s\n", ricevuto.mtext);
                     }
+                    // send signal to parent
+                    printf("Visto che ho perso mando un segnale all'arbitro per ritirarmi\n");
+                    kill(origin_PID, SIGUSR2);
                     flag_exit = false;
                 }
             }
@@ -478,6 +485,7 @@ void list_remove_child(node_t *head, pid_t *pid_child) // removes the node with 
     {
         current = NULL;    // set the current node to NULL
         head = head->next; // set the head to point to the next node and quit
+        search = false;
     }
     else
     {
@@ -485,9 +493,11 @@ void list_remove_child(node_t *head, pid_t *pid_child) // removes the node with 
         {
             if (current->next->pid == *pid_child)
             {
+                printf("removing: %d\n", current->next->pid);
                 tmp_node = current->next;
                 current->next = tmp_node->next;
                 free(tmp_node);
+                search = false;
             }
 
             current = current->next;
