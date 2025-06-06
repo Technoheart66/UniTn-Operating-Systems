@@ -245,5 +245,3 @@ Permission bits: https://man7.org/linux/man-pages/man2/chmod.2.html
 ====================================================================
  CONTINUA, il resto in C:\Users\franc\Desktop\Francesco\University\Semestre 4\Crispo Bruno, Sistemi Operativi\Laboratorio
 ====================================================================
-
-

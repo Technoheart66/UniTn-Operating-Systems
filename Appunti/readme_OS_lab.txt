@@ -17,13 +17,13 @@ Text art generator: Font: big, https://patorjk.com/software/taag/#p=testall&f=mi
  BASH
 ====================================================================
 
-https://devhints.io/bash
-bash cheatsheet carina
+tutorial: https://ryanstutorials.net/bash-scripting-tutorial/
 
-https://mywiki.wooledge.org/BashFAQ/031
-tabella operatori molto bella sotto spiegazione conditional expressions
+bash cheatsheet carina: https://devhints.io/bash
 
-//Run file
+tabella operatori molto bella sotto spiegazione conditional expressions: https://mywiki.wooledge.org/BashFAQ/031
+
+//// Run file
 
 bash ./example.sh
 
@@ -32,15 +32,15 @@ or we tell te os that the file is executable
 chmod +x example.sh		+x means executable
 ./example.sh
 
-//Variables
+//// Variables
 
-DATA="ciao"
+DATA="ciao"		N.B. data = "ciao" non funziona, gli spazi non ci devono essere
 echo $DATA
 
 DATA=$(pwd)  assigns the value of the command to DATA
 echo $DATA
 
-//Array
+//// Array
 
 Definizione: lista=("a" 1 "b" 2 "c" 3) separati da spazi!
 ● Output completo: ${lista[@]}
@@ -51,13 +51,13 @@ Definizione: lista=("a" 1 "b" 2 "c" 3) separati da spazi!
 ● Append: lista+=(value)
 ● Sub array: ${lista[@]:s:n} (from index s, length n)
 
-//Subshell
+//// Subshell
 It is possible to launch a subshell, that is a sub-environment, with (...commands...)
 and we can capture its output with $(...commands...) i.e. ls $(cat /tmp/tmp.txt)
 
 
 
-//Conditional expressions
+//// Conditional expressions
 since many operators are used to express different meanings (i.e. > means greater than but also output redirection) we need to encapsulate expressions
 
 https://www.gnu.org/software/bash/manual/html_node/Bash-Conditional-Expressions.html
@@ -93,7 +93,7 @@ if [[ -f $DATA ]]; then echo "file"; else if [[ -d $DATA ]]; then echo "director
 3. Stampa il risultato di una semplice operazione aritmetica (es: ‘1 < 2’) contenuta nel file indicato dal valore di DATA, oppure “?” se il file non esiste
 if [[ -f $DATA ]]; then echo $(( $(cat $DATA) )); else echo "?"; fi
 
-//chmod +x
+//// chmod +x
 
 This command makes a file executable, we can have the same result by right clicking on the file Properties -> Permissions -> Allow executing file as program
 We just need to execute this command once per file
@@ -109,7 +109,7 @@ SCRIPT “bashpid.sh”:
 echo $BASHPID #the id of the current bash process
 echo $( echo $BASHPID)
 
-//Negli script: elementi particolari e altri costrutti
+//// Negli script: elementi particolari e altri costrutti
 
 ● $$ : contiene il PID del processo attuale (*)
 ● $? : contiene il codice di ritorno dell’ultimo comando eseguito
@@ -144,7 +144,7 @@ else
 echo between 10 and 20
 fi
 
-//Negli script: argomenti e funzioni
+//// Negli script: argomenti e funzioni
 
 SCRIPT “args.sh”:
 #!/usr/bin/env bash
@@ -243,7 +243,48 @@ Permission bits: https://man7.org/linux/man-pages/man2/chmod.2.html
 		This means: owner can read & write, group can read & write, others can read & write
 		
 ====================================================================
- CONTINUA, il resto in C:\Users\franc\Desktop\Francesco\University\Semestre 4\Crispo Bruno, Sistemi Operativi\Laboratorio
+ MAKEFILE
 ====================================================================
+
+Tutorial: https://makefiletutorial.com/
+
+A Makefile consists of a set of rules. A rule generally looks like this:
+
+		targets: prerequisites
+			command
+			command
+			command
+
+The targets are file names, separated by spaces. Typically, there is only one per rule.
+The commands are a series of steps typically used to make the target(s). These need to start with a tab character, not spaces.
+The prerequisites are also file names, separated by spaces. These files need to exist before the commands for the target are run. These are also called dependencies.
+
+
+Let's create a more typical Makefile - one that compiles a single C file. But before we do, make a file called blah.c that has the following contents:
+
+		// blah.c
+		int main() { return 0; }
+
+Then create the Makefile (called Makefile, as always):
+
+		blah:
+			cc blah.c -o blah
+
+This time, try simply running make. Since there's no target supplied as an argument to the make command, the first target is run. In this case, there's only one target (blah). The first time you run this, blah will be created. The second time, you'll see make: 'blah' is up to date. That's because the blah file already exists. But there's a problem: if we modify blah.c and then run make, nothing gets recompiled.
+
+We solve this by adding a prerequisite:
+
+		blah: blah.c
+			cc blah.c -o blah
+
+When we run make again, the following set of steps happens:
+
+The first target is selected, because the first target is the default target
+This has a prerequisite of blah.c
+Make decides if it should run the blah target. It will only run if blah doesn't exist, or blah.c is newer than blah.
+This last step is critical, and is the essence of make. 
+What it's attempting to do is decide if the prerequisites of blah have changed since blah was last compiled. 
+That is, if blah.c is modified, running make should recompile the file. 
+And conversely, if blah.c has not changed, then it should not be recompiled.
 
 
