@@ -8,5 +8,9 @@
 
 # esercizio 1
 DATA=$(pwd)
-[[ -e $DATA ]] && echo "esiste"
-[[]]
+[[ -e $DATA ]] && echo "T" || [[ ! -e $DATA ]] && echo "F"
+# oppure
+[[ ! -e ${DATA} ]] && echo "F" || [[ -e ${DATA} ]] && echo "T"
+# oppure
+[[ -e $DATA ]] && echo "T" || echo "F"
+
