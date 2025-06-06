@@ -1,0 +1,7 @@
+args.sh
+argsBasics.sh
+bashpid.sh
+echo
+inverseArgs.sh
+prova.sh
+test.txt

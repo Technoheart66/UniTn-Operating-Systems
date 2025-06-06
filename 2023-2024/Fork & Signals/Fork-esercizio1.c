@@ -1,0 +1,1 @@
+// Avendo come argomenti dei “binari”, si eseguono con exec ciascuno in un sottoprocesso (generando un figlio)
