@@ -74,11 +74,11 @@ https://linuxsimply.com/bash-scripting-tutorial/conditional-statements/if-else/i
 Esempi carini di if-then-else con vari operatori
 if-then-else: 
 deve iniziare con if e terminare con fi
-ricordati che dopo ogni clausala devi mettere ; 
+ricordati che dopo ogni clausola devi mettere ; 
 
 Some examples
 
-if test 1 -gt 2; 
+if test 1 -gt 2;
 then echo "bella"; 
 else "cacca"; 
 fi
@@ -115,7 +115,9 @@ echo $( echo $BASHPID)
 ● $? : contiene il codice di ritorno dell’ultimo comando eseguito
 ● (( a > 2 )) this is an aritmetic expansions i.e. (( a++ )) (( a = 3<10?1:0 )) and capture the output b=$((c+a))
 
-echo $$, echo $?
+common uses:
+	echo $$
+	echo $?
 
 Le righe vuote e i commenti (#) sono ignorati
 La prima riga può essere un metacommento (detto hash-bang, she-bang e altri nomi simili): #!application [opts]
@@ -166,11 +168,18 @@ output in ordine inverso
 
 special case of $@ and $*, must be quoted, check the bash cheatsheet
 
-./inverseArgs.sh
-nArgs=$#
+./inverseArgs.sh oppure ./BashEsercizio1_v1.sh
+#!/usr/bin/env bash
+#Scrivere uno script che dato un qualunque numero di argomenti li restituisca in  output in ordine inverso.
 
-while [[ $nArgs > 0 ]]; do
-echo ${lista[$nArgs]}; (( i-- )) done
+nArgs=$#
+echo "There are $nArgs arguments"
+listaArgs=("$@")
+i=$nArgs
+while [[ $i -ge 0 ]]; do
+  echo ${listaArgs[$i]}
+  (( i-- ))
+done
 
 
 ====================================================================

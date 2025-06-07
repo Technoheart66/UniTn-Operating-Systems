@@ -13,4 +13,6 @@ DATA=$(pwd)
 [[ ! -e ${DATA} ]] && echo "F" || [[ -e ${DATA} ]] && echo "T"
 # oppure
 [[ -e $DATA ]] && echo "T" || echo "F"
+# oppure
+if [[ -e $DATA ]]; then echo "T"; else echo "F"; fi
 
