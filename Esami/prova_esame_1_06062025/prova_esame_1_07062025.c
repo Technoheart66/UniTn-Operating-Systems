@@ -28,21 +28,35 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <pthread.h>
 
 // Section 3: define
 #define STR_INPUT_BUFFER 256
+#define STR_COMMAND 64
+#define STR_OPTION 64
 
 // Section 4: typedef
-typedef struct msg_buffer_struct
+typedef struct msg_buffer_struct // new type for queue messages
 {
   long mtype;
-  char mtext[STR_INPUT_BUFFER / 2];
+  char mtext[STR_OPTION];
 } MsgQueue;
 
+typedef struct param_buffer_thread_struct // new type for passing arguments to a threaded function
+{
+  char command[STR_COMMAND];
+  char option_one[STR_OPTION];
+  char option_two[STR_OPTION];
+} ParamsThread;
+
 // Section 5: global variables
+volatile sig_atomic_t flag_SIGUSR1 = 0;
 
 // Section 6: function declaration
 void handler_SIGUSR1(int signo, siginfo_t *info, void *empty);
+void *thread_kill(void *param);  // threaded; send a kill signal
+void *thread_queue(void *param); // threaded; send a message in the queue specified in the file
+void *thread_fifo(void *param);  // threaded; send a message in the FIFO specified in the file
 
 // Section 7: main
 int main(int argc, char *argv[])
@@ -67,14 +81,21 @@ int main(int argc, char *argv[])
     return exit_value;
   }
 
-  // Acknowledgment
-
-  // handler
-  struct sigaction sigaction_SIGUSR1, old;
-  sigaction_SIGUSR1.sa_handler = handler;
+  // Acknowledgment: handler
+  struct sigaction sigaction_SIGUSR1, old_sa;
+  sigaction_SIGUSR1.sa_handler = handler_SIGUSR1;
   sigemptyset(&sigaction_SIGUSR1.sa_mask);
-  sigaddset(&sigaction_SIGUSR1.sa_mask, SIGUSR1);
-  sigaction(SIGUSR1, &sigaction_SIGUSR1, &old);
+  sigaddset(&sigaction_SIGUSR1.sa_mask, SIGUSR1); // while inside handler block SIGUSR1 so that the handler can't be interrupted
+  sigaction(SIGUSR1, &sigaction_SIGUSR1, &old_sa);
+
+  // Acknowledgment: block signals
+  sigset_t block, old_block;
+  sigemptyset(&block);
+  sigfillset(&block);
+  sigdelset(&block, SIGUSR1);
+  sigprocmask(SIG_BLOCK, &block, &old_block);
+
+  // Acknowledgment: sigsuspend -> done after first command
 
   // create queue
   key_t queue_key = ftok(argv[1], 1);
@@ -88,9 +109,9 @@ int main(int argc, char *argv[])
     counter++;
     // getline(); // not part of C standard, it is a POSIX extension, it can automatically allocate memory
     fgets(buffer_from_file, sizeof(buffer_from_file), input_file); // read one line
-    char command[STR_INPUT_BUFFER];                                // store the command
-    char option_one[STR_INPUT_BUFFER / 2];                         // store the first command argument
-    char option_two[STR_INPUT_BUFFER / 2];                         // store the second command argument
+    char command[STR_COMMAND];                                     // store the command
+    char option_one[STR_OPTION];                                   // store the first command argument
+    char option_two[STR_OPTION];                                   // store the second command argument
     int matches = sscanf(buffer_from_file, "%s %s %s", command, option_one, option_two);
     switch (matches)
     {
@@ -110,8 +131,16 @@ int main(int argc, char *argv[])
       if (strcmp("kill", command) == 0) // if the command is kill
       {
         // kill <signo> <pid>
-        printf("%d) kill %s %s\n", counter, option_one, option_two);
-        kill(atoi(option_one), atoi(option_two));
+        // printf("%d) kill %s %s\n", counter, option_one, option_two);
+        // kill(atoi(option_one), atoi(option_two));
+
+        // threaded version
+        pthread_t thread;
+        ParamsThread *parametri = malloc(sizeof(ParamsThread));
+        snprintf(parametri->command, sizeof(parametri->command), "%s", command);
+        snprintf(parametri->option_one, sizeof(parametri->option_one), "%s", option_one);
+        snprintf(parametri->option_two, sizeof(parametri->option_two), "%s", option_two);
+        pthread_create(&thread, NULL, thread_kill, (void *)parametri); // inside thread
       }
       else if (strcmp("queue", command) == 0) // if the command is queue
       {
@@ -145,8 +174,15 @@ int main(int argc, char *argv[])
       break;
     }
 
-    // sigsuspend for SIGUSR1, use flag
-
+    // Acknowledgment: sigsuspend -> done after first command
+    sigset_t wait_SIGUSR1;
+    sigemptyset(&wait_SIGUSR1);        // ensure set is empty
+    sigfillset(&wait_SIGUSR1);         // ensure set is completely full
+    sigdelset(&wait_SIGUSR1, SIGUSR1); // only SIGUSR1 should pass
+    while (!flag_SIGUSR1)              // if flag is not set keep waiting
+    {
+      sigsuspend(&wait_SIGUSR1); // wait for any signal to arrive but first change the mask
+    }
   }
 
   return exit_value;
@@ -155,4 +191,11 @@ int main(int argc, char *argv[])
 void handler_SIGUSR1(int signo, siginfo_t *info, void *empty)
 {
   printf("Inside handler_SIGUSR1\n");
+}
+
+void *thread_kill(void *param) // threaded; send a kill signal
+{
+  ParamsThread *args = (ParamsThread *)param;
+  kill(atoi(args->option_one), atoi(args->option_two));
+  return NULL; // end thread
 }
