@@ -23,10 +23,28 @@
 #include <signal.h>  // kill(), sigaction(), sigprocmask() etc.
 #include <sys/msg.h> // QUEUE -> msgget()
 #include <fcntl.h>   // FILE DESCRIPTORS -> fcntl()
+#include <sys/ipc.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <errno.h>
 
 // Section 3: define
 #define STR_INPUT_BUFFER 256
 
+// Section 4: typedef
+typedef struct msg_buffer_struct
+{
+  long mtype;
+  char mtext[STR_INPUT_BUFFER / 2];
+} MsgQueue;
+
+// Section 5: global variables
+
+// Section 6: function declaration
+void handler_SIGUSR1(int signo, siginfo_t *info, void *empty);
+
+// Section 7: main
 int main(int argc, char *argv[])
 {
   unsigned short int exit_value = EXIT_SUCCESS;
@@ -49,9 +67,18 @@ int main(int argc, char *argv[])
     return exit_value;
   }
 
-  // create queue for later use
+  // Acknowledgment
 
-  unsigned short int queue_id = msgget();
+  // handler
+  struct sigaction sigaction_SIGUSR1, old;
+  sigaction_SIGUSR1.sa_handler = handler;
+  sigemptyset(&sigaction_SIGUSR1.sa_mask);
+  sigaddset(&sigaction_SIGUSR1.sa_mask, SIGUSR1);
+  sigaction(SIGUSR1, &sigaction_SIGUSR1, &old);
+
+  // create queue
+  key_t queue_key = ftok(argv[1], 1);
+  unsigned short int queue_id = msgget(queue_key, IPC_CREAT);
 
   // read the file until it is empty
   char buffer_from_file[STR_INPUT_BUFFER];
@@ -84,30 +111,48 @@ int main(int argc, char *argv[])
       {
         // kill <signo> <pid>
         printf("%d) kill %s %s\n", counter, option_one, option_two);
-        kill(option_one, option_two);
+        kill(atoi(option_one), atoi(option_two));
       }
       else if (strcmp("queue", command) == 0) // if the command is queue
       {
         // queue <category> <word>
         printf("%d) queue %s %s\n", counter, option_one, option_two);
+        MsgQueue messaggio_coda;
+        messaggio_coda.mtype = atoi(option_one);
+        snprintf(messaggio_coda.mtext, sizeof(messaggio_coda.mtext), "%s", option_two);
+        msgsnd(queue_id, &messaggio_coda, sizeof(messaggio_coda.mtext), 0); // 0 = no flags, default behavior
       }
       else if (strcmp("fifo", command) == 0) // if the command is fifo
       {
         // fifo <name> <word>
         printf("%d) fifo %s %s\n", counter, option_one, option_two);
+        // create FIFO if it doesn't exist
+        mkfifo(option_one, IPC_CREAT);
+        open(option_one, O_RDWR);
+        if (write(option_one, sizeof(option_two), option_two) == -1)
+        {
+          fprintf(stderr, "ERROR: write error, errno = %d", errno);
+        }
       }
       else
       {
         fprintf(stderr, "%d) ERROR: unspecified command or not implemented '%s %s %s'\n", counter, command, option_one, option_two);
       }
-
       break;
 
     default: // less than 0 or more than 3 yields a generic error
       fprintf(stderr, "%d) ERROR: parsing error '%s'\n", counter, buffer_from_file);
       break;
     }
+
+    // sigsuspend for SIGUSR1, use flag
+
   }
 
   return exit_value;
+}
+
+void handler_SIGUSR1(int signo, siginfo_t *info, void *empty)
+{
+  printf("Inside handler_SIGUSR1\n");
 }

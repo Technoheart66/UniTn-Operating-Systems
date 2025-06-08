@@ -3,4 +3,5 @@ Jolteon è molto bello
 catturato Articuno
 kill 10 127
 queue 69 bottiglia
+queue 10 Fuochetto
 fifo test ciao
