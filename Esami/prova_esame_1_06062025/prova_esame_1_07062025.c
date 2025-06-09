@@ -32,21 +32,21 @@
 
 // Section 3: define
 #define STR_INPUT_BUFFER 256
-#define STR_COMMAND 64
-#define STR_OPTION 64
+#define STR_SPECIFIED_LENGTH 256
 
 // Section 4: typedef
-typedef struct msg_buffer_struct // new type for queue messages
+typedef struct struct_buffer_msg // new type for queue messages
 {
   long mtype;
-  char mtext[STR_OPTION];
+  char mtext[STR_SPECIFIED_LENGTH];
 } MsgQueue;
 
-typedef struct param_buffer_thread_struct // new type for passing arguments to a threaded function
+typedef struct struct_buffer_param_thread // new type for passing arguments to a threaded function
 {
-  char command[STR_COMMAND];
-  char option_one[STR_OPTION];
-  char option_two[STR_OPTION];
+  char command[STR_SPECIFIED_LENGTH];
+  char option_one[STR_SPECIFIED_LENGTH];
+  char option_two[STR_SPECIFIED_LENGTH];
+  unsigned short int queue_id;
 } ParamsThread;
 
 // Section 5: global variables
@@ -109,9 +109,9 @@ int main(int argc, char *argv[])
     counter++;
     // getline(); // not part of C standard, it is a POSIX extension, it can automatically allocate memory
     fgets(buffer_from_file, sizeof(buffer_from_file), input_file); // read one line
-    char command[STR_COMMAND];                                     // store the command
-    char option_one[STR_OPTION];                                   // store the first command argument
-    char option_two[STR_OPTION];                                   // store the second command argument
+    char command[STR_SPECIFIED_LENGTH];                                     // store the command
+    char option_one[STR_SPECIFIED_LENGTH];                                  // store the first command argument
+    char option_two[STR_SPECIFIED_LENGTH];                                  // store the second command argument
     int matches = sscanf(buffer_from_file, "%s %s %s", command, option_one, option_two);
     switch (matches)
     {
@@ -140,28 +140,45 @@ int main(int argc, char *argv[])
         snprintf(parametri->command, sizeof(parametri->command), "%s", command);
         snprintf(parametri->option_one, sizeof(parametri->option_one), "%s", option_one);
         snprintf(parametri->option_two, sizeof(parametri->option_two), "%s", option_two);
+        parametri->queue_id = queue_id;
         pthread_create(&thread, NULL, thread_kill, (void *)parametri); // inside thread
       }
       else if (strcmp("queue", command) == 0) // if the command is queue
       {
         // queue <category> <word>
-        printf("%d) queue %s %s\n", counter, option_one, option_two);
-        MsgQueue messaggio_coda;
-        messaggio_coda.mtype = atoi(option_one);
-        snprintf(messaggio_coda.mtext, sizeof(messaggio_coda.mtext), "%s", option_two);
-        msgsnd(queue_id, &messaggio_coda, sizeof(messaggio_coda.mtext), 0); // 0 = no flags, default behavior
+        // printf("%d) queue %s %s\n", counter, option_one, option_two);
+        // MsgQueue messaggio_coda;
+        // messaggio_coda.mtype = atoi(option_one);
+        // snprintf(messaggio_coda.mtext, sizeof(messaggio_coda.mtext), "%s", option_two);
+        // msgsnd(queue_id, &messaggio_coda, sizeof(messaggio_coda.mtext), 0); // 0 = no flags, default behavior
+
+        // threaded version
+        pthread_t thread;
+        ParamsThread *parametri = malloc(sizeof(ParamsThread));
+        snprintf(parametri->command, sizeof(parametri->command), "%s", command);
+        snprintf(parametri->option_one, sizeof(parametri->option_one), "%s", option_one);
+        snprintf(parametri->option_two, sizeof(parametri->option_two), "%s", option_two);
+        pthread_create(&thread, NULL, thread_queue, (void *)parametri);
       }
       else if (strcmp("fifo", command) == 0) // if the command is fifo
       {
         // fifo <name> <word>
-        printf("%d) fifo %s %s\n", counter, option_one, option_two);
-        // create FIFO if it doesn't exist
-        mkfifo(option_one, IPC_CREAT);
-        open(option_one, O_RDWR);
-        if (write(option_one, sizeof(option_two), option_two) == -1)
-        {
-          fprintf(stderr, "ERROR: write error, errno = %d", errno);
-        }
+        // printf("%d) fifo %s %s\n", counter, option_one, option_two);
+        // // create FIFO if it doesn't exist
+        // mkfifo(option_one, IPC_CREAT);
+        // open(option_one, O_RDWR);
+        // if (write(option_one, sizeof(option_two), option_two) == -1)
+        // {
+        //   fprintf(stderr, "ERROR: write error, errno = %d", errno);
+        // }
+
+        // threaded version
+        pthread_t thread;
+        ParamsThread *parametri = malloc(sizeof(ParamsThread));
+        snprintf(parametri->option_one, sizeof(parametri->option_one), "%s", option_one);
+        snprintf(parametri->option_two, sizeof(parametri->option_two), "%s", option_two);
+        parametri->queue_id = 0; // vuota
+        pthread_create(&thread, NULL, thread_fifo, (void *)parametri);
       }
       else
       {
@@ -197,5 +214,28 @@ void *thread_kill(void *param) // threaded; send a kill signal
 {
   ParamsThread *args = (ParamsThread *)param;
   kill(atoi(args->option_one), atoi(args->option_two));
+  free(args);  // free memory to avoid memory leaks
   return NULL; // end thread
+}
+
+void *thread_queue(void *param) // threaded; send a message in the queue
+{
+  ParamsThread *args = (ParamsThread *)param;
+  MsgQueue messaggio;
+  messaggio.mtype = atoi(args->option_one);
+  snprintf(messaggio.mtext, sizeof(messaggio.mtext), "%s", args->option_two);
+  if (msgsnd(args->queue_id, &messaggio, sizeof(messaggio.mtext), IPC_NOWAIT) == -1) // IPC_NOWAIT: fails if the queue is full
+  {
+    fprintf(stderr, "ERROR: failed to send a message in the queue, reason: %s\n", strerror(errno));
+  }
+  free(args);
+}
+
+void *thread_fifo(void *param) // threaded; send a message in the FIFO specified in the file
+{
+  ParamsThread *args = (ParamsThread *)param;
+  mkfifo(args->option_one, O_CREAT | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+  int fd = open(args->option_one, O_CREAT);
+  write(fd, args->option_two, sizeof(args->option_two));
+  free(args);
 }

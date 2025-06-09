@@ -18,6 +18,7 @@ Text art generator: Font: big, https://patorjk.com/software/taag/#p=testall&f=mi
 ====================================================================
 
 tutorial: https://ryanstutorials.net/bash-scripting-tutorial/
+altro tutorial, W3Schools: http://www.w3schools.com/bash/bash_syntax.php
 
 bash cheatsheet carina: https://devhints.io/bash
 
@@ -49,7 +50,7 @@ Definizione: lista=("a" 1 "b" 2 "c" 3) separati da spazi!
 ● Dimensione: ${#lista[@]}
 ● Set elemento: lista[x]=value
 ● Append: lista+=(value)
-● Sub array: ${lista[@]:s:n} (from index s, length n)
+● Sub array: ${lista[@]:s:n} (from index s, length n)  
 
 //// Subshell
 It is possible to launch a subshell, that is a sub-environment, with (...commands...)
@@ -67,7 +68,7 @@ https://mywiki.wooledge.org/BashFAQ/031
 Ottima spiegazione della differenza tra:
 ● open square bracket command --> [ ]			this is the same as test	
 ● test command --> test condition				this is the same as [ ]
-● bash test construct --> [[ ]]
+● bash test construct --> [[ ]]					very powerful
 
 
 https://linuxsimply.com/bash-scripting-tutorial/conditional-statements/if-else/if-else-one-line/#:~:text=To%20express%20one%2Dline%20if,code%20block%20will%20be%20executed
@@ -111,6 +112,7 @@ echo $( echo $BASHPID)
 
 //// Negli script: elementi particolari e altri costrutti
 
+● #! she-bang (è un metacommento, detto anche hash-bang)
 ● $$ : contiene il PID del processo attuale (*)
 ● $? : contiene il codice di ritorno dell’ultimo comando eseguito
 ● (( a > 2 )) this is an aritmetic expansions i.e. (( a++ )) (( a = 3<10?1:0 )) and capture the output b=$((c+a))
@@ -120,8 +122,9 @@ common uses:
 	echo $?
 
 Le righe vuote e i commenti (#) sono ignorati
-La prima riga può essere un metacommento (detto hash-bang, she-bang e altri nomi simili): #!application [opts]
-che identifica un’applicazione cui passare il file stesso come argomento (tipicamente usato per identificare l’interprete da utilizzare)
+La prima riga può essere un metacommento (detto hash-bang, she-bang e altri nomi simili):
+● #!application [opts]
+Lo she-bang identifica un’applicazione cui passare il file stesso come argomento (tipicamente usato per identificare l’interprete da utilizzare)
 Sono disponibili variabili speciali in particolare
 ● $@ : lista completa degli argomenti passati allo script
 ● $# : numero di argomenti passati allo script
@@ -133,6 +136,7 @@ echo ${lista[$i]}
 done
 
 While loop:
+i=0
 while [[ $i < 10 ]]; do
 echo $i ; (( i++ ))
 done

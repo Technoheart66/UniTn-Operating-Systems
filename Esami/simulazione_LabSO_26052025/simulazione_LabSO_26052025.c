@@ -46,7 +46,7 @@ typedef struct node // I need a way to store each child information, so let's do
     struct node *next;
 } node_t;
 
-typedef struct msg_buffer_struct
+typedef struct struct_buffer_msg
 {
     long mtype;
     char mtext[QUEUE_PAYLOAD];
