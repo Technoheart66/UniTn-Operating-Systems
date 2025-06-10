@@ -25,6 +25,8 @@
 #include <sys/stat.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 
 // Section 3: define
 #define STR_DEFAULT 64 // string length not specified, setting custom defualt valueu
@@ -78,6 +80,11 @@ int main(int argc, char *argv[])
     {
         fprintf(stderr, "ERROR: couldn't read file, check contents\n");
     }
+
+    // request 8) create queue (coda)
+    char * queue_path = "∕tmp∕login.fifo";
+    key_t queue_key = ftok(queue_path, 51);
+    int queue_id = msgget(queue_key, IPC_CREAT); // IPC_CREAT: if it exists then return it's id, otherwise create a new one
 
     // write to new file, copy the password in a new file
     FILE *new_file = NULL;
@@ -133,7 +140,7 @@ int main(int argc, char *argv[])
     ThreadArgs *argomenti = malloc(sizeof(ThreadArgs));
     snprintf(argomenti->password, sizeof(argomenti->password), "%s", password);
     snprintf(argomenti->username, sizeof(argomenti->username), "%s", username);
-    pthread_create(thread, NULL, thread_wait_password, (void *)argomenti);
+    pthread_create(&thread, NULL, thread_wait_password, (void *)argomenti);
 
     // request 5) receive multiple messages in a specified fifo, wait for messages indefinitely
     char fifo_client[STR_DEFAULT] = "∕tmp∕clients.fifo"; // hardcoded string literal, read-only
