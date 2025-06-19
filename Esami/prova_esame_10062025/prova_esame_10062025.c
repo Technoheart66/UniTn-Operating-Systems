@@ -35,8 +35,16 @@
 typedef struct thread_args
 {
     char username[STR_DEFAULT];
-    char password[STR_DEFAULT];
+    char password[STR_DEFAULT]; // request #6
+    int queue_id_thread;        // request #9
+    pid_t pid;                  // request #9
 } ThreadArgs;
+
+typedef struct struct_queue_msg // request #9
+{
+    long mtype;              // it will be the last received PID
+    char mtext[STR_DEFAULT]; // it will be the received password at request #6
+} QueueMsg;
 
 // Section 5: global variables
 
@@ -82,7 +90,7 @@ int main(int argc, char *argv[])
     }
 
     // request 8) create queue (coda)
-    char * queue_path = "∕tmp∕login.fifo";
+    char *queue_path = "∕tmp∕login.fifo";
     key_t queue_key = ftok(queue_path, 51);
     int queue_id = msgget(queue_key, IPC_CREAT); // IPC_CREAT: if it exists then return it's id, otherwise create a new one
 
@@ -129,17 +137,19 @@ int main(int argc, char *argv[])
         exit_status = 105; // custom error value, fifo authenticator
         exit(exit_status);
     }
-    int fifo_id_authenticator = open(fifo_authenticator, O_WRONLY);       // open the FIFO in read only
+    int fifo_id_authenticator = open(fifo_authenticator, O_WRONLY | O_CREAT);       // open the FIFO in read only
     char write_msg_fifo[STR_DEFAULT] = {0};                               // will store the message to be sent in the fifo
     snprintf(write_msg_fifo, sizeof(write_msg_fifo), "%d", getpid());     // put the PID in string format inside the message
     write(fifo_id_authenticator, write_msg_fifo, sizeof(write_msg_fifo)); // write message in fifo
 
-    // request 6) create new thread in which the application should wait indefinitely
+    // request #6 create new thread in which the application should wait indefinitely
     // set up arguments to be later cast to void in order to send to threaded function
     pthread_t thread;
     ThreadArgs *argomenti = malloc(sizeof(ThreadArgs));
     snprintf(argomenti->password, sizeof(argomenti->password), "%s", password);
     snprintf(argomenti->username, sizeof(argomenti->username), "%s", username);
+    argomenti->queue_id_thread = queue_id; // request #9
+    argomenti->pid = 0;                    // for the moment initialize PID to 0
     pthread_create(&thread, NULL, thread_wait_password, (void *)argomenti);
 
     // request 5) receive multiple messages in a specified fifo, wait for messages indefinitely
@@ -158,8 +168,9 @@ int main(int argc, char *argv[])
         char read_msg_fifo[STR_DEFAULT] = {0};
         pid_t pid_received = 0;
         read(fifo_id_client, read_msg_fifo, sizeof(read_msg_fifo));
-        pid_received = atoi(read_msg_fifo); // parse PID from buffer and store it
-        kill(pid_received, SIGUSR1);        // send message to PID read in FIFO client
+        pid_received = atoi(read_msg_fifo);        // parse PID from buffer and store it
+        kill(pid_received, SIGUSR1);               // send message to PID read in FIFO client
+        argomenti->queue_id_thread = pid_received; // request #9, since it is allocated on heap and I pass this to the thread it should be able to read it
     }
 
     return exit_status;
@@ -199,6 +210,14 @@ void *thread_wait_password(void *arg)
         else
         {
             printf("NO\n");
+        }
+
+        if (params->pid != 0) // just checj if a PID is present)
+        {
+            QueueMsg messaggio;
+            messaggio.mtype = params->pid;                                    // request #9, send message with type equal to the last received PID
+            snprintf(messaggio.mtext, sizeof(messaggio.mtext), "%s", buffer); // request #9, send message with payload equal to the password that has been just read
+            msgsnd(params->queue_id_thread, &messaggio, sizeof(messaggio.mtext), 0);
         }
     }
 }
